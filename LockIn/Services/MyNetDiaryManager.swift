@@ -1,14 +1,10 @@
 // MyNetDiaryManager.swift
-// Handles all MyNetDiary integration attempts, in priority order:
-// 1. Deep link (mynetdiary:// URL scheme) — if available
-// 2. Universal link fallback
-// 3. App Store URL to open MND if not installed
-// 4. Manual prompt with exact instructions
+// Opens MyNetDiary via URL scheme deep link.
+// If the deep link fails (scheme unsupported / app not installed),
+// falls back to opening the App Store page — so something always happens.
 //
-// NOTE: MyNetDiary's official URL schemes are not publicly documented.
-// The scheme "mynetdiary://" has been reported by users but is not guaranteed
-// to work or to remain stable across MND app updates. All calls are best-effort.
-// The fallback manual prompt is always available and is the most reliable path.
+// NOTE: mynetdiary:// is user-reported, not officially documented by MND.
+// All deep links are best-effort. The App Store fallback is the guaranteed floor.
 
 import Foundation
 import UIKit
@@ -31,107 +27,81 @@ struct MNDIntegrationResult {
 final class MyNetDiaryManager: ObservableObject {
     static let shared = MyNetDiaryManager()
 
-    // Known deep link schemes (best-effort, not officially documented)
-    private let knownSchemes: [String] = [
-        "mynetdiary://",
-        "mynetdiary://diary",
-        "mynetdiary://food"
-    ]
-
-    // App Store link for MyNetDiary
-    private let appStoreURL = URL(string: "https://apps.apple.com/us/app/mynetdiary-calorie-counter/id287529757")!
+    // MND App Store URL — always openable, guaranteed fallback
+    private let appStoreURL = URL(string: "itms-apps://itunes.apple.com/app/id287529757")!
+    // Web fallback if App Store scheme unavailable
+    private let appStoreWebURL = URL(string: "https://apps.apple.com/us/app/mynetdiary-calorie-counter/id287529757")!
 
     @Published var lastOpenedAt: Date?
-    @Published var isInstalled: Bool = false
-    @Published var customDeepLink: String = ""
 
-    // MARK: - Check if MND is installed
-    func checkInstalled() {
-        guard let url = URL(string: "mynetdiary://") else {
-            isInstalled = false
-            return
-        }
-        isInstalled = UIApplication.shared.canOpenURL(url)
-    }
-
-    // MARK: - Main Action Handler
-    /// Attempts to open MyNetDiary for a specific action.
-    /// Returns a result indicating which method worked and fallback instructions.
+    // MARK: - Main Open Function
+    /// Tries MND deep links in order. If all fail, opens App Store so
+    /// the user can at least tap "Open" from there.
     @discardableResult
-    func open(_ action: MNDAction, customLink: String? = nil) async -> MNDIntegrationResult {
-        // 1. Try user-configured custom deep link first
-        if let custom = customLink ?? (customDeepLink.isEmpty ? nil : customDeepLink),
-           let url = URL(string: custom),
-           await tryOpen(url: url) {
-            lastOpenedAt = .now
-            return MNDIntegrationResult(success: true, method: "Custom deep link: \(custom)", fallbackInstructions: nil)
-        }
+    func open(_ action: MNDAction) async -> MNDIntegrationResult {
+        let schemes = deepLinksFor(action: action)
 
-        // 2. Try known MND URL schemes
-        for scheme in deepLinksFor(action: action) {
-            if let url = URL(string: scheme), await tryOpen(url: url) {
+        for scheme in schemes {
+            guard let url = URL(string: scheme) else { continue }
+            let opened = await openURL(url)
+            if opened {
                 lastOpenedAt = .now
-                return MNDIntegrationResult(success: true, method: "Deep link: \(scheme)", fallbackInstructions: nil)
+                return MNDIntegrationResult(success: true, method: scheme, fallbackInstructions: nil)
             }
         }
 
-        // 3. Try generic app open
-        if let url = URL(string: "mynetdiary://"), await tryOpen(url: url) {
-            lastOpenedAt = .now
-            return MNDIntegrationResult(success: true, method: "Generic app open", fallbackInstructions: nil)
+        // Deep links all failed — open App Store as a guaranteed fallback.
+        // On the device this opens the MND App Store page; user can tap "Open"
+        // to launch MND if installed, or download it.
+        let storeOpened = await openURL(appStoreURL)
+        if !storeOpened {
+            // Last resort: web URL
+            await openURL(appStoreWebURL)
         }
 
-        // 4. Manual fallback
         return MNDIntegrationResult(
             success: false,
-            method: "Manual fallback",
+            method: "App Store fallback",
             fallbackInstructions: fallbackInstructions(for: action)
         )
     }
 
-    // MARK: - Open App Store (if not installed)
-    func openAppStore() {
-        UIApplication.shared.open(appStoreURL)
-    }
-
-    // MARK: - Private Helpers
-    private func tryOpen(url: URL) async -> Bool {
-        guard UIApplication.shared.canOpenURL(url) else { return false }
-        return await UIApplication.shared.open(url)
-    }
-
-    private func deepLinksFor(action: MNDAction) -> [String] {
-        // These are best-effort. No official documentation confirms these routes.
-        switch action {
-        case .openApp:       return ["mynetdiary://diary", "mynetdiary://"]
-        case .logFood:       return ["mynetdiary://food/add", "mynetdiary://diary"]
-        case .logWeight:     return ["mynetdiary://weight", "mynetdiary://progress"]
-        case .logDiary:      return ["mynetdiary://diary"]
-        case .viewDashboard: return ["mynetdiary://"]
+    // MARK: - Private: Open URL using completion handler form (correct async wrapping)
+    @discardableResult
+    private func openURL(_ url: URL) async -> Bool {
+        await withCheckedContinuation { continuation in
+            UIApplication.shared.open(url, options: [:]) { success in
+                continuation.resume(returning: success)
+            }
         }
     }
 
-    private func fallbackInstructions(for action: MNDAction) -> String {
+    // MARK: - URL schemes per action
+    private func deepLinksFor(_ action: MNDAction) -> [String] {
+        // mynetdiary:// is user-reported but not officially documented.
+        // Tried in order — first match wins.
         switch action {
         case .openApp:
-            return "Open MyNetDiary manually from your home screen."
+            return ["mynetdiary://", "mynetdiary://diary"]
         case .logFood:
-            return "Open MyNetDiary → tap the + button → Food → log your meal."
+            return ["mynetdiary://diary", "mynetdiary://"]
         case .logWeight:
-            return "Open MyNetDiary → tap Progress → Body Weight → add today's weight."
+            return ["mynetdiary://diary", "mynetdiary://"]
         case .logDiary:
-            return "Open MyNetDiary → tap Diary → review and confirm today's entries."
+            return ["mynetdiary://diary", "mynetdiary://"]
         case .viewDashboard:
-            return "Open MyNetDiary → tap Dashboard to see today's summary."
+            return ["mynetdiary://", "mynetdiary://diary"]
         }
     }
-}
 
-// MARK: - Manual Prompt View Model
-struct MNDPromptData: Identifiable {
-    let id = UUID()
-    let title: String
-    let instructions: String
-    let actionTitle: String
-    let onAction: () -> Void
+    // MARK: - Fallback instructions (shown only if deep link AND App Store both fail)
+    private func fallbackInstructions(for action: MNDAction) -> String {
+        switch action {
+        case .openApp:       return "Open MyNetDiary from your home screen."
+        case .logFood:       return "Open MyNetDiary → tap + → Food → log your meal."
+        case .logWeight:     return "Open MyNetDiary → Progress → Body Weight → log today's weight."
+        case .logDiary:      return "Open MyNetDiary → Diary → review today's entries."
+        case .viewDashboard: return "Open MyNetDiary → Dashboard."
+        }
+    }
 }

@@ -43,7 +43,8 @@ struct TodayView: View {
             heightInches: profile.heightInches,
             bodyFatPercent: profile.estimatedBodyFatPercent,
             activityLevel: profile.activityLevel,
-            targetCalories: goal.dailyCalorieTarget
+            targetCalories: goal.dailyCalorieTarget,
+            goalWeightLb: goal.targetWeight
         )
     }
 
@@ -422,9 +423,10 @@ struct TodayView: View {
         guard let cal = todayLog?.actualCalories, let target = goalProfile?.dailyCalorieTarget else {
             return LockInTheme.Colors.textSecondary
         }
-        if cal > target { return LockInTheme.Colors.accentRed }
-        if Double(cal) / Double(target) > 0.8 { return LockInTheme.Colors.accentGreen }
-        return LockInTheme.Colors.textSecondary
+        let tdee = bodyComposition?.tdeeKcal ?? Double(target) * 1.15
+        if Double(cal) <= Double(target) { return LockInTheme.Colors.accentGreen }
+        if Double(cal) <= tdee           { return LockInTheme.Colors.accentOrange }
+        return LockInTheme.Colors.accentRed
     }
 
     private var proteinColor: Color {
@@ -432,8 +434,7 @@ struct TodayView: View {
             return LockInTheme.Colors.textSecondary
         }
         if prot >= target { return LockInTheme.Colors.accentGreen }
-        if Double(prot) / Double(target) > 0.75 { return LockInTheme.Colors.accent }
-        return LockInTheme.Colors.accentRed
+        return LockInTheme.Colors.accentOrange
     }
 
     private var complianceColor: Color {

@@ -1,5 +1,5 @@
 // ProgressView.swift
-// Analytics hub: weight trend, compliance, body composition, TDEE engine.
+// Analytics hub: weight trend, charts, body composition, TDEE engine.
 
 import SwiftUI
 import SwiftData
@@ -8,20 +8,19 @@ import Charts
 struct CutProgressView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WeightEntry.date, order: .forward) private var weightEntries: [WeightEntry]
-    @Query(sort: \AdherenceMetric.date, order: .forward) private var adherenceMetrics: [AdherenceMetric]
+    @Query(sort: \DailyLog.date, order: .forward) private var dailyLogs: [DailyLog]
     @Query private var userProfiles: [UserProfile]
     @Query private var goalProfiles: [GoalProfile]
     @Query private var tdeeStates: [TDEEAdjustmentState]
 
     @State private var selectedView: ProgressSection = .weight
-    @State private var showBodyComp = false
 
     enum ProgressSection: String, CaseIterable {
-        case weight     = "Weight"
-        case compliance = "Compliance"
-        case bodyComp   = "Body Comp"
-        case engine     = "TDEE Engine"
-        case photos     = "Photos"
+        case weight   = "Weight"
+        case charts   = "Charts"
+        case bodyComp = "Body Comp"
+        case engine   = "TDEE Engine"
+        case photos   = "Photos"
     }
 
     private var userProfile: UserProfile? { userProfiles.first }
@@ -38,11 +37,11 @@ struct CutProgressView: View {
                     ScrollView {
                         VStack(spacing: LockInTheme.Spacing.md) {
                             switch selectedView {
-                            case .weight:     weightSection
-                            case .compliance: complianceSection
-                            case .bodyComp:   bodyCompSection
-                            case .engine:     tdeeEngineSection
-                            case .photos:     ProgressPhotoView()
+                            case .weight:   weightSection
+                            case .charts:   InteractiveChartsView(weightEntries: weightEntries, dailyLogs: dailyLogs, goalWeight: goalProfile?.targetWeight ?? 147)
+                            case .bodyComp: bodyCompSection
+                            case .engine:   tdeeEngineSection
+                            case .photos:   ProgressPhotoView()
                             }
                         }
                         .padding(LockInTheme.Spacing.md)
@@ -133,15 +132,6 @@ struct CutProgressView: View {
         }
     }
 
-    // MARK: - Compliance Section
-    private var complianceSection: some View {
-        VStack(spacing: LockInTheme.Spacing.md) {
-            ComplianceChartView(metrics: adherenceMetrics)
-            ComplianceStreaksCard(metrics: adherenceMetrics)
-            ComplianceCategoryBreakdown(metrics: adherenceMetrics)
-        }
-    }
-
     // MARK: - Body Comp Section
     private var bodyCompSection: some View {
         VStack(spacing: LockInTheme.Spacing.md) {
@@ -152,7 +142,8 @@ struct CutProgressView: View {
                     heightInches: profile.heightInches,
                     bodyFatPercent: bfEst,
                     activityLevel: profile.activityLevel,
-                    targetCalories: goal.dailyCalorieTarget
+                    targetCalories: goal.dailyCalorieTarget,
+                    goalWeightLb: goal.targetWeight
                 )
                 BodyCompositionCard(result: result)
                 ExplanationCard(lines: result.explanationLines)
@@ -318,180 +309,6 @@ struct ProjectionCard: View {
     }
 }
 
-// MARK: - Compliance Chart
-struct ComplianceChartView: View {
-    let metrics: [AdherenceMetric]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-            Text("30-DAY COMPLIANCE")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 4)
-
-            if metrics.isEmpty {
-                Text("No data yet. Start checking off your daily items.")
-                    .font(.system(size: 13))
-                    .foregroundColor(LockInTheme.Colors.textSecondary)
-                    .frame(maxWidth: .infinity).frame(height: 140)
-                    .cardStyle()
-            } else {
-                let recent = Array(metrics.suffix(30))
-                Chart(recent) { metric in
-                    BarMark(
-                        x: .value("Date", metric.date),
-                        y: .value("Score", metric.complianceScore)
-                    )
-                    .foregroundStyle(barColor(metric.complianceScore))
-                    .cornerRadius(2)
-                }
-                .frame(height: 160)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
-                        AxisValueLabel(format: .dateTime.day())
-                            .foregroundStyle(LockInTheme.Colors.textTertiary)
-                            .font(.system(size: 9))
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(values: [0, 50, 75, 100]) { _ in
-                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
-                        AxisValueLabel()
-                            .foregroundStyle(LockInTheme.Colors.textTertiary)
-                            .font(.system(size: 9))
-                    }
-                }
-                .chartYScale(domain: 0...100)
-                .padding(LockInTheme.Spacing.md)
-                .cardStyle()
-            }
-        }
-    }
-
-    private func barColor(_ score: Double) -> Color {
-        if score >= 85 { return LockInTheme.Colors.accentGreen }
-        if score >= 65 { return LockInTheme.Colors.accent }
-        if score >= 40 { return LockInTheme.Colors.accentOrange }
-        return LockInTheme.Colors.accentRed
-    }
-}
-
-// MARK: - Compliance Streaks
-struct ComplianceStreaksCard: View {
-    let metrics: [AdherenceMetric]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-            Text("STREAKS")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 4)
-
-            let sorted = metrics.sorted { $0.date > $1.date }
-
-            VStack(spacing: LockInTheme.Spacing.sm) {
-                StreakRow(label: "No restaurant food", count: streak(sorted, keyPath: \.noRestaurantFood))
-                StreakRow(label: "No dessert",          count: streak(sorted, keyPath: \.noDessert))
-                StreakRow(label: "Morning weigh-in",    count: streak(sorted, keyPath: \.weighedIn))
-                StreakRow(label: "Hit protein",         count: streak(sorted, keyPath: \.hitProtein))
-                StreakRow(label: "Under calories",      count: streak(sorted, keyPath: \.underCalories))
-                StreakRow(label: "Logged in MND",       count: streak(sorted, keyPath: \.loggedInMND))
-            }
-            .padding(LockInTheme.Spacing.md)
-            .cardStyle()
-        }
-    }
-
-    private func streak(_ metrics: [AdherenceMetric], keyPath: KeyPath<AdherenceMetric, Bool>) -> Int {
-        var count = 0
-        for m in metrics {
-            if m[keyPath: keyPath] { count += 1 } else { break }
-        }
-        return count
-    }
-}
-
-struct StreakRow: View {
-    let label: String
-    let count: Int
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(LockInTheme.Font.label(13))
-                .foregroundColor(LockInTheme.Colors.textSecondary)
-            Spacer()
-            HStack(spacing: 3) {
-                Text("\(count)")
-                    .font(LockInTheme.Font.mono(16, weight: .bold))
-                    .foregroundColor(count >= 7 ? LockInTheme.Colors.accentGreen : (count >= 3 ? LockInTheme.Colors.accent : LockInTheme.Colors.textPrimary))
-                Text("days")
-                    .font(.system(size: 11))
-                    .foregroundColor(LockInTheme.Colors.textTertiary)
-            }
-        }
-    }
-}
-
-// MARK: - Compliance Category Breakdown
-struct ComplianceCategoryBreakdown: View {
-    let metrics: [AdherenceMetric]
-
-    private var recent30: [AdherenceMetric] { Array(metrics.suffix(30)) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-            Text("30-DAY RATE")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 4)
-
-            VStack(spacing: LockInTheme.Spacing.sm) {
-                CategoryRateRow(label: "No restaurant food", rate: rate(\.noRestaurantFood))
-                CategoryRateRow(label: "No dessert",          rate: rate(\.noDessert))
-                CategoryRateRow(label: "Under calories",      rate: rate(\.underCalories))
-                CategoryRateRow(label: "Hit protein",         rate: rate(\.hitProtein))
-                CategoryRateRow(label: "Morning weigh-in",    rate: rate(\.weighedIn))
-                CategoryRateRow(label: "Logged in MND",       rate: rate(\.loggedInMND))
-                CategoryRateRow(label: "Logged all meals",    rate: rate(\.loggedAllMeals))
-            }
-            .padding(LockInTheme.Spacing.md)
-            .cardStyle()
-        }
-    }
-
-    private func rate(_ keyPath: KeyPath<AdherenceMetric, Bool>) -> Double {
-        guard !recent30.isEmpty else { return 0 }
-        let success = recent30.filter { $0[keyPath: keyPath] }.count
-        return Double(success) / Double(recent30.count)
-    }
-}
-
-struct CategoryRateRow: View {
-    let label: String
-    let rate: Double
-
-    var body: some View {
-        VStack(spacing: 4) {
-            HStack {
-                Text(label)
-                    .font(LockInTheme.Font.label(12))
-                    .foregroundColor(LockInTheme.Colors.textSecondary)
-                Spacer()
-                Text("\(Int(rate * 100))%")
-                    .font(LockInTheme.Font.mono(12, weight: .semibold))
-                    .foregroundColor(barColor(rate))
-            }
-            LockInProgressBar(value: rate, color: barColor(rate), height: 3)
-        }
-    }
-
-    private func barColor(_ r: Double) -> Color {
-        if r >= 0.85 { return LockInTheme.Colors.accentGreen }
-        if r >= 0.65 { return LockInTheme.Colors.accent }
-        if r >= 0.45 { return LockInTheme.Colors.accentOrange }
-        return LockInTheme.Colors.accentRed
-    }
-}
-
 // MARK: - Body Composition Card
 struct BodyCompositionCard: View {
     let result: BodyCompositionResult
@@ -521,6 +338,11 @@ struct BodyCompositionCard: View {
                 StatRow(label: "Expected Loss",
                         value: String(format: "%.2f lb/week", result.expectedWeeklyLossLb),
                         valueColor: LockInTheme.Colors.accent)
+                Divider().background(LockInTheme.Colors.border)
+                let for1lb  = max(1200, Int(result.tdeeKcal) - 500)
+                let for15lb = max(1000, Int(result.tdeeKcal) - 750)
+                StatRow(label: "Budget → 1 lb/wk",   value: "\(for1lb) kcal/day",  valueColor: LockInTheme.Colors.accentGreen)
+                StatRow(label: "Budget → 1.5 lb/wk", value: "\(for15lb) kcal/day", valueColor: LockInTheme.Colors.accentOrange)
             }
             .padding(LockInTheme.Spacing.md)
             .cardStyle()
@@ -645,8 +467,231 @@ struct WeeklyCheckpointList: View {
     }
 }
 
+// MARK: - Interactive Charts View
+struct InteractiveChartsView: View {
+    let weightEntries: [WeightEntry]
+    let dailyLogs: [DailyLog]
+    let goalWeight: Double
+
+    var body: some View {
+        VStack(spacing: LockInTheme.Spacing.md) {
+            InteractiveWeightChart(entries: weightEntries, goalWeight: goalWeight)
+            InteractiveScoreChart(logs: dailyLogs)
+        }
+    }
+}
+
+// MARK: - Interactive Weight Chart
+struct InteractiveWeightChart: View {
+    let entries: [WeightEntry]
+    let goalWeight: Double
+
+    @State private var selectedDate: Date?
+
+    private var display: [WeightEntry] { Array(entries.suffix(60)) }
+    private var selected: WeightEntry? {
+        guard let d = selectedDate else { return nil }
+        return display.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) })
+    }
+    private var movingAvgs: [(date: Date, value: Double)] {
+        guard display.count >= 7 else { return [] }
+        return display.enumerated().compactMap { i, e in
+            guard i >= 6 else { return nil }
+            let w = display[(i-6)...i]
+            return (date: e.date, value: w.map { $0.weightLb }.reduce(0,+) / 7.0)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
+            HStack {
+                Text("WEIGHT OVER TIME").sectionHeaderStyle()
+                Spacer()
+                if let e = selected {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(String(format: "%.1f lb", e.weightLb))
+                            .font(LockInTheme.Font.mono(13, weight: .semibold))
+                            .foregroundColor(LockInTheme.Colors.accent)
+                            .glowAccent(radius: 4)
+                        Text(fmtDate(e.date))
+                            .font(.system(size: 10))
+                            .foregroundColor(LockInTheme.Colors.textTertiary)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+
+            if display.isEmpty {
+                Text("No weigh-ins yet. Log your weight every morning.")
+                    .font(.system(size: 13))
+                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity).frame(height: 200)
+                    .cardStyle()
+            } else {
+                Chart {
+                    ForEach(display) { e in
+                        AreaMark(x: .value("Date", e.date), y: .value("lb", e.weightLb))
+                            .foregroundStyle(LinearGradient(
+                                colors: [LockInTheme.Colors.accent.opacity(0.15), .clear],
+                                startPoint: .top, endPoint: .bottom))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", e.date), y: .value("lb", e.weightLb))
+                            .foregroundStyle(LockInTheme.Colors.accent)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .interpolationMethod(.catmullRom)
+                    }
+                    ForEach(movingAvgs, id: \.date) { pt in
+                        LineMark(x: .value("Date", pt.date), y: .value("Avg", pt.value))
+                            .foregroundStyle(LockInTheme.Colors.textSecondary.opacity(0.45))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                            .interpolationMethod(.catmullRom)
+                    }
+                    RuleMark(y: .value("Goal", goalWeight))
+                        .foregroundStyle(LockInTheme.Colors.accentGreen.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text("goal").font(.system(size: 9))
+                                .foregroundColor(LockInTheme.Colors.accentGreen.opacity(0.7))
+                        }
+                    if let e = selected {
+                        RuleMark(x: .value("Sel", e.date))
+                            .foregroundStyle(LockInTheme.Colors.accent.opacity(0.3))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        PointMark(x: .value("Date", e.date), y: .value("lb", e.weightLb))
+                            .foregroundStyle(LockInTheme.Colors.accent)
+                            .symbolSize(50)
+                    }
+                }
+                .frame(height: 210)
+                .chartXSelection(value: $selectedDate)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: max(1, display.count / 5))) { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                            .foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel().foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .padding(LockInTheme.Spacing.md)
+                .cardStyle()
+            }
+        }
+    }
+
+    private func fmtDate(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
+    }
+}
+
+// MARK: - Interactive Score Chart
+struct InteractiveScoreChart: View {
+    let logs: [DailyLog]
+
+    @State private var selectedDate: Date?
+
+    private var scored: [DailyLog] { Array(logs.filter { $0.complianceScore > 0 }.suffix(60)) }
+    private var selected: DailyLog? {
+        guard let d = selectedDate else { return nil }
+        return scored.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
+            HStack {
+                Text("DAILY SCORE OVER TIME").sectionHeaderStyle()
+                Spacer()
+                if let log = selected {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(Int(log.complianceScore)) pts")
+                            .font(LockInTheme.Font.mono(13, weight: .semibold))
+                            .foregroundColor(scoreColor(log.complianceScore))
+                        Text(fmtDate(log.date))
+                            .font(.system(size: 10))
+                            .foregroundColor(LockInTheme.Colors.textTertiary)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+
+            if scored.isEmpty {
+                Text("No score data yet. Complete your daily checklist items.")
+                    .font(.system(size: 13))
+                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity).frame(height: 180)
+                    .cardStyle()
+            } else {
+                Chart {
+                    ForEach(scored) { log in
+                        AreaMark(x: .value("Date", log.date), y: .value("Score", log.complianceScore))
+                            .foregroundStyle(LinearGradient(
+                                colors: [LockInTheme.Colors.accentGreen.opacity(0.12), .clear],
+                                startPoint: .top, endPoint: .bottom))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", log.date), y: .value("Score", log.complianceScore))
+                            .foregroundStyle(LockInTheme.Colors.accentGreen)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .interpolationMethod(.catmullRom)
+                    }
+                    RuleMark(y: .value("Target", 85))
+                        .foregroundStyle(LockInTheme.Colors.accent.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text("85").font(.system(size: 9))
+                                .foregroundColor(LockInTheme.Colors.accent.opacity(0.6))
+                        }
+                    if let log = selected {
+                        RuleMark(x: .value("Sel", log.date))
+                            .foregroundStyle(LockInTheme.Colors.accentGreen.opacity(0.3))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        PointMark(x: .value("Date", log.date), y: .value("Score", log.complianceScore))
+                            .foregroundStyle(scoreColor(log.complianceScore))
+                            .symbolSize(50)
+                    }
+                }
+                .frame(height: 190)
+                .chartXSelection(value: $selectedDate)
+                .chartYScale(domain: 0...100)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: max(1, scored.count / 5))) { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                            .foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(values: [0, 25, 50, 75, 100]) { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel().foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .padding(LockInTheme.Spacing.md)
+                .cardStyle()
+            }
+        }
+    }
+
+    private func scoreColor(_ s: Double) -> Color {
+        if s >= 85 { return LockInTheme.Colors.accentGreen }
+        if s >= 65 { return LockInTheme.Colors.accent }
+        if s >= 40 { return LockInTheme.Colors.accentOrange }
+        return LockInTheme.Colors.accentRed
+    }
+    private func fmtDate(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
+    }
+}
+
 #Preview {
     CutProgressView()
         .modelContainer(for: [UserProfile.self, GoalProfile.self, WeightEntry.self,
-                               AdherenceMetric.self, TDEEAdjustmentState.self], inMemory: true)
+                               DailyLog.self, TDEEAdjustmentState.self], inMemory: true)
 }

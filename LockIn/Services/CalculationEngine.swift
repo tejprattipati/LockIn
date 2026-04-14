@@ -74,9 +74,7 @@ enum CalculationEngine {
     /// Applies a conservative activity multiplier to BMR.
     /// We intentionally use slightly lower multipliers than standard tables.
     static func tdee(bmr: Double, activityMultiplier: Double) -> Double {
-        // Apply an additional 5% conservative haircut on top of the user-selected multiplier.
-        let conservativeHaircut = 0.95
-        return bmr * activityMultiplier * conservativeHaircut
+        return bmr * activityMultiplier
     }
 
     // MARK: - Main Compute Function
@@ -85,7 +83,8 @@ enum CalculationEngine {
         heightInches: Double,
         bodyFatPercent: Double,
         activityLevel: ActivityLevel,
-        targetCalories: Int
+        targetCalories: Int,
+        goalWeightLb: Double = 147.0
     ) -> BodyCompositionResult {
         let lbm = leanBodyMass(weightLb: weightLb, bodyFatPercent: bodyFatPercent)
         let fatMass = weightLb - lbm
@@ -98,7 +97,7 @@ enum CalculationEngine {
         let deficit = tdeeVal - Double(targetCalories)
         let weeklyLoss = (deficit * 7.0) / 3500.0  // 3500 kcal ≈ 1 lb fat
 
-        let poundsToGoal: Double = weightLb - 147.0
+        let poundsToGoal: Double = weightLb - goalWeightLb
         let weeksNeeded = poundsToGoal / max(0.1, weeklyLoss)
         let projectedDate = Calendar.current.date(byAdding: .day, value: Int(weeksNeeded * 7), to: .now) ?? .now
 
@@ -345,12 +344,12 @@ enum CalculationEngine {
             "Lean Body Mass: \(String(format: "%.1f", lbm)) lb (\(String(format: "%.1f", lbmKg)) kg)",
             "Fat Mass: \(String(format: "%.1f", fatMass)) lb",
             "BMR: \(String(format: "%.0f", bmr)) kcal/day — \(method)",
-            "Activity Multiplier: ×\(String(format: "%.2f", multiplier)) (with 5% conservative haircut applied)",
-            "Conservative TDEE: \(String(format: "%.0f", tdee)) kcal/day",
+            "Activity Multiplier: ×\(String(format: "%.2f", multiplier))",
+            "TDEE: \(String(format: "%.0f", tdee)) kcal/day",
             "Target Calories: \(targetCalories) kcal/day",
             "Daily Deficit: \(String(format: "%.0f", deficit)) kcal/day",
             "Expected Weekly Loss: \(String(format: "%.2f", weeklyLoss)) lb/week",
-            "Note: TDEE is intentionally underestimated. The adaptive engine will refine this over time."
+            "Note: The adaptive engine will refine TDEE over time based on actual weight trends."
         ]
     }
 

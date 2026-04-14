@@ -43,6 +43,8 @@
 		FFAC0006D5553F110FCF8CFC /* MyNetDiaryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 261A4CFCEC7967A50E96647D /* MyNetDiaryManager.swift */; };
 		D9B2E88F13045C9DAF6B4022 /* ProgressPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A1D77E02F34B8C9E5A3F11 /* ProgressPhoto.swift */; };
 		F1D4AAAB35267EBFC08D6244 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C3F99A24156DAEBF7C5133 /* GeminiService.swift */; };
+		F2A1B3C4D5E67890AB12CD36 /* SecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A1B3C4D5E67890AB12CD34 /* SecretsStore.swift */; };
+		F2A1B3C4D5E67890AB12CD37 /* SecretsStore.example.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A1B3C4D5E67890AB12CD35 /* SecretsStore.example.swift */; };
 		B3F6CDDE57489ADEF2AF8466 /* ProgressPhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E5BCCD46378FCDE19E7355 /* ProgressPhotoView.swift */; };
 		D5B8EFF079601CF0C4C1A688 /* ScreenshotImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7DEEF68590BEFB3B09577 /* ScreenshotImportView.swift */; };
 /* End PBXBuildFile section */
@@ -87,6 +89,8 @@
 		FED675ABEDF16CC17186EE2D /* DailyChecklistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyChecklistView.swift; sourceTree = "<group>"; };
 		C8A1D77E02F34B8C9E5A3F11 /* ProgressPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPhoto.swift; sourceTree = "<group>"; };
 		E0C3F99A24156DAEBF7C5133 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		F2A1B3C4D5E67890AB12CD34 /* SecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsStore.swift; sourceTree = "<group>"; };
+		F2A1B3C4D5E67890AB12CD35 /* SecretsStore.example.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsStore.example.swift; sourceTree = "<group>"; };
 		A2E5BCCD46378FCDE19E7355 /* ProgressPhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPhotoView.swift; sourceTree = "<group>"; };
 		C4A7DEEF68590BEFB3B09577 /* ScreenshotImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotImportView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -234,6 +238,8 @@
 				261A4CFCEC7967A50E96647D /* MyNetDiaryManager.swift */,
 				92D5B6E4E1838B4D823EE0A8 /* NotificationManager.swift */,
 				E0C3F99A24156DAEBF7C5133 /* GeminiService.swift */,
+				F2A1B3C4D5E67890AB12CD34 /* SecretsStore.swift */,
+				F2A1B3C4D5E67890AB12CD35 /* SecretsStore.example.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -359,6 +365,8 @@
 				742A3C46FF2C7E8CF48D436E /* WorkoutEntry.swift in Sources */,
 				D9B2E88F13045C9DAF6B4022 /* ProgressPhoto.swift in Sources */,
 				F1D4AAAB35267EBFC08D6244 /* GeminiService.swift in Sources */,
+				F2A1B3C4D5E67890AB12CD36 /* SecretsStore.swift in Sources */,
+				F2A1B3C4D5E67890AB12CD37 /* SecretsStore.example.swift in Sources */,
 				B3F6CDDE57489ADEF2AF8466 /* ProgressPhotoView.swift in Sources */,
 				D5B8EFF079601CF0C4C1A688 /* ScreenshotImportView.swift in Sources */,
 			);

@@ -116,6 +116,13 @@ struct TodayView: View {
         .preferredColorScheme(.dark)
         .task {
             DataSeeder.ensureTodayLog(in: modelContext)
+            WidgetDataStore.sync(log: todayLog, goal: goalProfile, dayNumber: daysSinceStart)
+        }
+        .onChange(of: todayLog?.complianceScore) { _, _ in
+            WidgetDataStore.sync(log: todayLog, goal: goalProfile, dayNumber: daysSinceStart)
+        }
+        .onChange(of: todayLog?.actualCalories) { _, _ in
+            WidgetDataStore.sync(log: todayLog, goal: goalProfile, dayNumber: daysSinceStart)
         }
     }
 
@@ -474,8 +481,8 @@ struct TodayView: View {
         todayLog?.checklist(for: .morningWeighIn)?.isCompleted = true
         todayLog?.checklist(for: .morningWeighIn)?.completedAt = .now
         try? modelContext.save()
-        // Cancel noon and 6pm weigh-in follow-up reminders — done for today
         NotificationManager.shared.cancelWeighInFollowUps()
+        WidgetDataStore.sync(log: todayLog, goal: goalProfile, dayNumber: daysSinceStart)
     }
 
     private func saveCalories(calories: Int, protein: Int, carbs: Int = 0, fat: Int = 0) {
@@ -491,8 +498,8 @@ struct TodayView: View {
         }
         if let log = todayLog { log.complianceScore = ComplianceCalculator.score(for: log) }
         try? modelContext.save()
-        // Cancel 9pm/10pm food-log reminders — already done today
         NotificationManager.shared.cancelFoodLoggingReminders()
+        WidgetDataStore.sync(log: todayLog, goal: goalProfile, dayNumber: daysSinceStart)
     }
 }
 

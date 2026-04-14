@@ -60,16 +60,16 @@ struct LockInApp: App {
         // 1. Register notification categories
         notificationManager.registerCategories()
 
-        // 2. Check authorization status
-        await notificationManager.checkStatus()
+        // 2. Request authorization (shows dialog on first run, no-op thereafter)
+        let granted = await notificationManager.requestAuthorization()
 
         // 3. Seed default data (no-op if already seeded)
         let context = LockInApp.sharedModelContainer.mainContext
         DataSeeder.seedIfNeeded(modelContext: context)
 
         // 4. Reschedule notifications — skip smart reminders if action already done today
-        let rules = (try? context.fetch(FetchDescriptor<ReminderRule>())) ?? []
-        if notificationManager.authorizationStatus == .authorized {
+        if granted {
+            let rules = (try? context.fetch(FetchDescriptor<ReminderRule>())) ?? []
             let today = Calendar.current.startOfDay(for: .now)
             let todayPred = #Predicate<DailyLog> { $0.date == today }
             let todayLog = (try? context.fetch(FetchDescriptor<DailyLog>(predicate: todayPred)))?.first

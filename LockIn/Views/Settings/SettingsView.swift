@@ -115,8 +115,11 @@ struct SettingsView: View {
             if notificationManager.authorizationStatus != .authorized {
                 Button("Request Notification Permission") {
                     Task {
-                        _ = await notificationManager.requestAuthorization()
+                        let granted = await notificationManager.requestAuthorization()
                         notificationAuthRequested = true
+                        if granted {
+                            await notificationManager.scheduleAll(from: reminderRules)
+                        }
                     }
                 }
                 .foregroundColor(LockInTheme.Colors.accent)

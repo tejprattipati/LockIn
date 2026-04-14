@@ -141,6 +141,70 @@ final class NotificationManager: ObservableObject {
             if isFoodLogged && rule.type.isSmartFoodLog { continue }
             await schedule(rule: rule)
         }
+
+        // Fixed built-in schedules (not user-configurable)
+        await scheduleWaterReminders()
+        await scheduleCreatineReminders()
+    }
+
+    // MARK: - Water Reminders (every 30 min, 9am – 9pm)
+    func scheduleWaterReminders() async {
+        let center = UNUserNotificationCenter.current()
+        let messages = [
+            "Stay hydrated. Drink a full glass now.",
+            "Water check. Don't wait until you're thirsty.",
+            "Hydration is part of the plan. Drink now.",
+            "Half-hour water reminder. Glass of water, go.",
+            "Drink water. You know the deal.",
+        ]
+        var slot = 0
+        // 9:00 through 21:00 in 30-minute steps
+        while true {
+            let totalMins = 9 * 60 + slot * 30
+            let h = totalMins / 60
+            let m = totalMins % 60
+            if h > 21 { break }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Drink Water"
+            content.body = messages[slot % messages.count]
+            content.sound = UNNotificationSound.default
+
+            var comps = DateComponents()
+            comps.hour = h
+            comps.minute = m
+            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+            let request = UNNotificationRequest(
+                identifier: "lockin.water.\(h).\(m)",
+                content: content,
+                trigger: trigger
+            )
+            try? await center.add(request)
+            slot += 1
+        }
+    }
+
+    // MARK: - Creatine Reminders (9am, 2pm, 7pm)
+    func scheduleCreatineReminders() async {
+        let center = UNUserNotificationCenter.current()
+        let times = [(9, 0), (14, 0), (19, 0)]
+        for (hour, minute) in times {
+            let content = UNMutableNotificationContent()
+            content.title = "Take Creatine"
+            content.body = "5g creatine. Consistency over time — don't skip."
+            content.sound = UNNotificationSound.default
+
+            var comps = DateComponents()
+            comps.hour = hour
+            comps.minute = minute
+            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+            let request = UNNotificationRequest(
+                identifier: "lockin.creatine.\(hour)",
+                content: content,
+                trigger: trigger
+            )
+            try? await center.add(request)
+        }
     }
 
     // MARK: - Cancel smart reminders when action is done today

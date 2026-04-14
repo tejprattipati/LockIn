@@ -42,6 +42,7 @@ struct InterveneView: View {
                         .font(LockInTheme.Font.mono(14, weight: .bold))
                         .foregroundColor(LockInTheme.Colors.accentRed)
                         .tracking(3)
+                        .glowAccent(radius: 8)
                 }
             }
             .sheet(isPresented: $showAntiBingeFlow) {

@@ -84,6 +84,7 @@ struct TodayView: View {
                         .font(LockInTheme.Font.mono(16, weight: .bold))
                         .foregroundColor(LockInTheme.Colors.accent)
                         .tracking(4)
+                        .glowAccent(radius: 8)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -125,19 +126,12 @@ struct TodayView: View {
                     Text(todayDateString)
                         .font(LockInTheme.Font.label(12))
                         .foregroundColor(LockInTheme.Colors.textSecondary)
-                    Text("Day \(daysSinceStart) of the Cut")
+                    Text("Day \(daysSinceStart)")
                         .font(LockInTheme.Font.title(20))
                         .foregroundColor(LockInTheme.Colors.textPrimary)
                 }
                 Spacer()
                 countdownBadge
-            }
-
-            if let goal = goalProfile {
-                Text(goal.motivationStatement)
-                    .font(LockInTheme.Font.label(12))
-                    .foregroundColor(LockInTheme.Colors.textSecondary)
-                    .lineLimit(2)
             }
         }
         .padding(LockInTheme.Spacing.md)
@@ -149,6 +143,7 @@ struct TodayView: View {
             Text("\(goalProfile?.daysUntilGoal ?? 0)")
                 .font(LockInTheme.Font.mono(28, weight: .bold))
                 .foregroundColor(LockInTheme.Colors.accent)
+                .glowAccent(radius: 10)
             Text("days left")
                 .font(LockInTheme.Font.label(10))
                 .foregroundColor(LockInTheme.Colors.textSecondary)

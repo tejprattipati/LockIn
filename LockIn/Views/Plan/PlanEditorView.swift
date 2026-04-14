@@ -43,6 +43,7 @@ struct PlanEditorView: View {
                         .font(LockInTheme.Font.mono(14, weight: .bold))
                         .foregroundColor(LockInTheme.Colors.accent)
                         .tracking(3)
+                        .glowAccent(radius: 8)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

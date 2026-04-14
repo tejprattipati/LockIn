@@ -102,6 +102,13 @@ struct SectionHeaderStyle: ViewModifier {
 extension View {
     func cardStyle(elevated: Bool = false) -> some View { modifier(CardStyle(elevated: elevated)) }
     func sectionHeaderStyle() -> some View { modifier(SectionHeaderStyle()) }
+    /// Subtle electric glow — use on accent-colored bold text and key UI elements
+    func glowAccent(radius: CGFloat = 7) -> some View {
+        shadow(color: LockInTheme.Colors.accent.opacity(0.55), radius: radius, x: 0, y: 0)
+    }
+    func glowGreen(radius: CGFloat = 6) -> some View {
+        shadow(color: LockInTheme.Colors.accentGreen.opacity(0.5), radius: radius, x: 0, y: 0)
+    }
 }
 
 // MARK: - Shared stat row
@@ -146,6 +153,7 @@ struct LockInProgressBar: View {
                 RoundedRectangle(cornerRadius: height / 2)
                     .fill(color)
                     .frame(width: max(0, geo.size.width * min(1, max(0, value))), height: height)
+                    .shadow(color: color.opacity(0.5), radius: 4, x: 0, y: 0)
             }
         }
         .frame(height: height)

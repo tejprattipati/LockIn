@@ -81,7 +81,7 @@ struct ScreenshotImportView: View {
                     .font(LockInTheme.Font.label(14, weight: .semibold))
                     .foregroundColor(LockInTheme.Colors.textPrimary)
             }
-            Text("Screenshot your MyNetDiary diary or food report showing daily totals. Gemini Vision reads calories, protein, carbs, and fat automatically.")
+            Text("Screenshot your MyNetDiary diary or food report showing daily totals. Claude AI reads calories, protein, carbs, and fat automatically.")
                 .font(.system(size: 13))
                 .foregroundColor(LockInTheme.Colors.textSecondary)
         }
@@ -149,7 +149,7 @@ struct ScreenshotImportView: View {
                         } else {
                             Image(systemName: "sparkles")
                         }
-                        Text(isAnalyzing ? "Analyzing..." : "Analyze with Gemini AI")
+                        Text(isAnalyzing ? "Analyzing..." : "Analyze with Claude AI")
                     }
                     .font(LockInTheme.Font.label(14, weight: .bold))
                     .foregroundColor(.black)

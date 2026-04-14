@@ -327,9 +327,9 @@ struct BodyCompositionCard: View {
                 Divider().background(LockInTheme.Colors.border)
                 StatRow(label: "BMR (\(result.bmrMethod.components(separatedBy: " (").first ?? ""))",
                         value: String(format: "%.0f kcal/day", result.bmrKcal))
-                StatRow(label: "Conservative TDEE",
+                StatRow(label: "TDEE",
                         value: String(format: "%.0f kcal/day", result.tdeeKcal),
-                        caption: "×\(String(format: "%.2f", result.activityMultiplier)) × 0.95 haircut")
+                        caption: "×\(String(format: "%.2f", result.activityMultiplier)) activity")
                 StatRow(label: "Target Calories",
                         value: "\(result.targetCalories) kcal/day")
                 StatRow(label: "Daily Deficit",

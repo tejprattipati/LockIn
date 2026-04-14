@@ -71,19 +71,55 @@ enum GeminiService {
             throw AIError.imageEncodingFailed
         }
 
+        // Reference frame injected into every analysis so the model doesn't guess low.
+        let bfReferenceContext = """
+        MALE BODY FAT REFERENCE (be accurate — do NOT underestimate):
+        - 8-12%: Clearly visible abs with deep separation, visible striations on chest/shoulders, very sharp face
+        - 13-16%: Some ab outline visible, lean athletic look, defined but not shredded
+        - 17-20%: Minimal ab definition, smooth midsection, some muscle shape visible, typical "fit" appearance
+        - 21-25%: No visible abs, soft midsection, flanks covered, average male appearance
+        - 26-30%: Noticeable belly, significant fat on flanks and back, round appearance
+        - 30%+: Prominent belly, significant fat throughout, very little visible muscle shape
+
+        CRITICAL RULES:
+        1. If you cannot see clear ab separation → do not estimate below 18%
+        2. If the midsection is visibly soft or rounded → estimate 22% or higher
+        3. If there is a visible belly → estimate 25% or higher
+        4. Most untrained or lightly-trained adult males are 20-28% body fat. Default to realistic, not flattering.
+        5. Give a specific estimate, not a vague range wider than 3%.
+        """
+
         var content: [[String: Any]] = []
 
         if let prev = previous, let prevData = prev.jpegData(compressionQuality: 0.75) {
-            content.append(["type": "text", "text": "These are progress photos from a personal fat-loss program. Image 1 is OLDER, Image 2 is MORE RECENT. Provide a brief, objective, clinical analysis comparing visible body composition changes. Focus on observable differences: muscle definition, waist/midsection, overall leanness. Keep it under 80 words. Be direct and factual — no motivational language."])
+            let comparisonPrompt = """
+            \(bfReferenceContext)
+
+            These are progress photos from a personal fat-loss program. Image 1 is OLDER, Image 2 is MORE RECENT.
+            Provide a clinical comparison:
+            1. Estimated body fat % in EACH photo (specific number or ≤3% range)
+            2. Observable changes: midsection, muscle definition, overall leanness
+            Under 100 words total. Direct and factual — no motivational language.
+            """
+            content.append(["type": "text", "text": comparisonPrompt])
             content.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": prevData.base64EncodedString()]])
             content.append(["type": "text", "text": "More recent photo:"])
             content.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": curData.base64EncodedString()]])
         } else {
-            content.append(["type": "text", "text": "This is a progress photo from a personal fat-loss program. Briefly describe the visible body composition — estimated leanness, muscle visibility, midsection. Under 60 words. Be direct and factual — no motivational language."])
+            let singlePrompt = """
+            \(bfReferenceContext)
+
+            This is a progress photo from a personal fat-loss program.
+            Provide:
+            1. Estimated body fat % (specific number or ≤3% range, e.g. "24-26%")
+            2. 2-3 sentences: midsection appearance, muscle visibility, overall leanness
+            Under 80 words total. Direct and clinical — no motivational language.
+            """
+            content.append(["type": "text", "text": singlePrompt])
             content.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": curData.base64EncodedString()]])
         }
 
-        return try await callAPI(content: content, maxTokens: 300)
+        return try await callAPI(content: content, maxTokens: 350)
     }
 
     // MARK: - Private: Claude Messages API call

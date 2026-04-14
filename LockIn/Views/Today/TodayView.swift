@@ -475,9 +475,11 @@ struct TodayView: View {
 
     // MARK: - Actions
     private func saveWeighIn(weightLb: Double) {
-        let entry = WeightEntry(date: .now, weightLb: weightLb, source: .manual)
+        // Update profile first so the computed BF% is available for the entry
+        userProfile?.updateWeightKeepingLBM(weightLb)
+        let computedBF = userProfile?.estimatedBodyFatPercent
+        let entry = WeightEntry(date: .now, weightLb: weightLb, bodyFatPercent: computedBF, source: .manual)
         modelContext.insert(entry)
-        userProfile?.currentWeight = weightLb
         todayLog?.checklist(for: .morningWeighIn)?.isCompleted = true
         todayLog?.checklist(for: .morningWeighIn)?.completedAt = .now
         try? modelContext.save()

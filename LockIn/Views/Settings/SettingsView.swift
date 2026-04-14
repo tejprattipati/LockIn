@@ -79,8 +79,13 @@ struct SettingsView: View {
                 HStack {
                     Text("Est. Body Fat")
                     Spacer()
-                    Text(String(format: "%.1f%%", profile.estimatedBodyFatPercent))
-                        .foregroundColor(LockInTheme.Colors.textSecondary)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(String(format: "%.1f%%", profile.estimatedBodyFatPercent))
+                            .foregroundColor(LockInTheme.Colors.textSecondary)
+                        Text(String(format: "%.1f lb fat / %.1f lb LBM", profile.fatMassLb, profile.leanBodyMassLb))
+                            .font(.system(size: 11))
+                            .foregroundColor(LockInTheme.Colors.textTertiary)
+                    }
                 }
                 HStack {
                     Text("Activity Level")
@@ -354,9 +359,11 @@ struct ProfileEditorSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        if let w = Double(weightText) { profile.currentWeight = w }
-                        if let bf = Double(bfText) { profile.estimatedBodyFatPercent = bf }
-                        profile.updatedAt = .now
+                        let newWeight = Double(weightText) ?? profile.currentWeight
+                        let newBF     = Double(bfText)     ?? profile.estimatedBodyFatPercent
+                        // Re-anchor LBM to the manually entered BF% at the given weight.
+                        // From here forward, weigh-ins will track fat mass off this baseline.
+                        profile.setBodyFatPercent(newBF, atWeight: newWeight)
                         try? modelContext.save()
                         isPresented = false
                     }

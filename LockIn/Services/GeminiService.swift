@@ -9,7 +9,7 @@ import UIKit
 
 enum GeminiService {
     private static let apiKey = "AIzaSyAbK8j4SsqrX7_2hARXNnWBxcfag2uNc2g"
-    private static let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    private static let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
     // MARK: - Nutrition Result
     struct NutritionResult {

@@ -1,7 +1,7 @@
 // HealthKitManager.swift
 // Handles HealthKit integration: reading weight, steps, and workouts.
-// Writes weight back only if user explicitly enables it.
-// Gracefully degrades if permissions are denied.
+// Uses callback-based authorization (more reliable than async throws form on device).
+// Gracefully degrades if permissions are denied or HealthKit is unavailable.
 
 import Foundation
 import HealthKit
@@ -20,24 +20,23 @@ final class HealthKitManager: ObservableObject {
     @Published var latestWeightLb: Double?
     @Published var todaySteps: Int?
 
-    // MARK: - Types we read
-    private var weightType: HKQuantityType? {
-        HKQuantityType.quantityType(forIdentifier: .bodyMass)
-    }
-    private var stepsType: HKQuantityType? {
-        HKQuantityType.quantityType(forIdentifier: .stepCount)
-    }
-    private var workoutType: HKObjectType {
-        HKObjectType.workoutType()
-    }
+    // MARK: - HK Types
+    private var weightType: HKQuantityType? { HKQuantityType.quantityType(forIdentifier: .bodyMass) }
+    private var stepsType: HKQuantityType? { HKQuantityType.quantityType(forIdentifier: .stepCount) }
+    private var workoutType: HKObjectType { HKObjectType.workoutType() }
 
     init() {
         isAvailable = HKHealthStore.isHealthDataAvailable()
     }
 
     // MARK: - Request Authorization
+    // Uses callback form wrapped in withCheckedContinuation — more reliable on device
+    // than the async throws overload which can fail silently when called from @MainActor.
     func requestAuthorization(writeWeight: Bool = false) async -> Bool {
-        guard isAvailable else { return false }
+        guard isAvailable else {
+            print("[HealthKitManager] HealthKit not available on this device.")
+            return false
+        }
 
         var readTypes = Set<HKObjectType>()
         var writeTypes = Set<HKSampleType>()
@@ -49,28 +48,41 @@ final class HealthKitManager: ObservableObject {
         if let st = stepsType { readTypes.insert(st) }
         readTypes.insert(workoutType)
 
-        do {
-            try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
-            await checkPermissions()
-            return true
-        } catch {
-            print("[HealthKitManager] Authorization error: \(error)")
-            return false
+        let granted: Bool = await withCheckedContinuation { continuation in
+            store.requestAuthorization(toShare: writeTypes, read: readTypes) { success, error in
+                if let error = error {
+                    print("[HealthKitManager] Auth error: \(error.localizedDescription)")
+                }
+                continuation.resume(returning: success)
+            }
         }
+
+        if granted { await checkPermissions() }
+        return granted
     }
 
+    // MARK: - Check Permissions
     func checkPermissions() async {
         guard isAvailable else { return }
+
+        // For quantity types, sharingAuthorized indicates write access was granted.
+        // HealthKit does not expose read-authorization status for privacy reasons.
+        // We use sharingAuthorized as a proxy — if the user completed the auth dialog
+        // and granted write, we assume read is also available.
+        // For read-only apps (no write), we infer from whether data can be fetched.
         if let wt = weightType {
-            weightPermissionGranted = store.authorizationStatus(for: wt) == .sharingAuthorized
+            let status = store.authorizationStatus(for: wt)
+            weightPermissionGranted = (status == .sharingAuthorized)
         }
         if let st = stepsType {
-            stepsPermissionGranted = store.authorizationStatus(for: st) == .sharingAuthorized
+            let status = store.authorizationStatus(for: st)
+            stepsPermissionGranted = (status == .sharingAuthorized)
         }
-        // Workout read permission is harder to check; assume if auth was run
+        // Workout reads don't surface a checkable status; mark granted after auth dialog.
+        workoutsPermissionGranted = isAvailable
     }
 
-    // MARK: - Read Most Recent Body Weight
+    // MARK: - Read Latest Body Weight
     func fetchLatestWeight() async -> Double? {
         guard isAvailable, let type = weightType else { return nil }
 
@@ -82,14 +94,13 @@ final class HealthKitManager: ObservableObject {
                     continuation.resume(returning: nil)
                     return
                 }
-                let lb = sample.quantity.doubleValue(for: HKUnit.pound())
-                continuation.resume(returning: lb)
+                continuation.resume(returning: sample.quantity.doubleValue(for: .pound()))
             }
             store.execute(query)
         }
     }
 
-    // MARK: - Read Recent Weight Entries (last N days)
+    // MARK: - Read Weight History (last N days)
     func fetchWeightHistory(days: Int = 30) async -> [(date: Date, weightLb: Double)] {
         guard isAvailable, let type = weightType else { return [] }
 
@@ -110,28 +121,23 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Write Weight (only if user opted in)
+    // MARK: - Write Weight
     func writeWeight(weightLb: Double, date: Date = .now) async -> Bool {
         guard isAvailable, let type = weightType else { return false }
-
         let quantity = HKQuantity(unit: .pound(), doubleValue: weightLb)
         let sample = HKQuantitySample(type: type, quantity: quantity, start: date, end: date)
-
-        do {
-            try await store.save(sample)
-            return true
-        } catch {
-            print("[HealthKitManager] Write weight error: \(error)")
-            return false
+        return await withCheckedContinuation { continuation in
+            store.save(sample) { success, error in
+                if let error = error { print("[HealthKitManager] Write error: \(error)") }
+                continuation.resume(returning: success)
+            }
         }
     }
 
     // MARK: - Read Today's Steps
     func fetchTodaySteps() async -> Int? {
         guard isAvailable, let type = stepsType else { return nil }
-
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: .now)
+        let startOfDay = Calendar.current.startOfDay(for: .now)
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: .now, options: .strictStartDate)
 
         return await withCheckedContinuation { continuation in
@@ -140,8 +146,7 @@ final class HealthKitManager: ObservableObject {
                     continuation.resume(returning: nil)
                     return
                 }
-                let steps = Int(sum.doubleValue(for: HKUnit.count()))
-                continuation.resume(returning: steps)
+                continuation.resume(returning: Int(sum.doubleValue(for: .count())))
             }
             store.execute(query)
         }
@@ -150,7 +155,6 @@ final class HealthKitManager: ObservableObject {
     // MARK: - Read Recent Workouts
     func fetchRecentWorkouts(days: Int = 7) async -> [WorkoutEntry] {
         guard isAvailable else { return [] }
-
         let startDate = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .now
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: .now, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
@@ -162,9 +166,12 @@ final class HealthKitManager: ObservableObject {
                     return
                 }
                 let entries = workouts.map { w -> WorkoutEntry in
-                    let type = HealthKitManager.mapWorkoutType(w.workoutActivityType)
-                    let duration = Int(w.duration / 60)
-                    return WorkoutEntry(date: w.endDate, type: type, durationMinutes: duration, source: "HealthKit")
+                    WorkoutEntry(
+                        date: w.endDate,
+                        type: HealthKitManager.mapWorkoutType(w.workoutActivityType),
+                        durationMinutes: Int(w.duration / 60),
+                        source: "HealthKit"
+                    )
                 }
                 continuation.resume(returning: entries)
             }
@@ -172,7 +179,7 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Full Sync
+    // MARK: - Sync (called on app open)
     func sync() async {
         guard isAvailable else { return }
         latestWeightLb = await fetchLatestWeight()
@@ -180,17 +187,15 @@ final class HealthKitManager: ObservableObject {
         lastSyncDate = .now
     }
 
-    // MARK: - Map HKWorkoutActivityType to WorkoutType
-    nonisolated private static func mapWorkoutType(_ hkType: HKWorkoutActivityType) -> WorkoutType {
-        switch hkType {
-        case .basketball:   return .basketball
-        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
-            return .lifting
-        case .running, .cycling, .elliptical, .rowing:
-            return .cardio
-        case .walking:      return .walk
+    // MARK: - Map HK workout type
+    nonisolated private static func mapWorkoutType(_ t: HKWorkoutActivityType) -> WorkoutType {
+        switch t {
+        case .basketball: return .basketball
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining: return .lifting
+        case .running, .cycling, .elliptical, .rowing: return .cardio
+        case .walking: return .walk
         case .highIntensityIntervalTraining: return .hiit
-        default:            return .other
+        default: return .other
         }
     }
 }

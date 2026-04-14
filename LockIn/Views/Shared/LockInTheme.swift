@@ -1,22 +1,34 @@
 // LockInTheme.swift
-// Centralised design tokens for the app's minimal, dark, disciplined aesthetic.
+// Design tokens. Dark navy palette — serious, crisp, mission-control feel.
+// Not wellness-app soft. Not pure black. Readable with visible depth.
 
 import SwiftUI
 
 enum LockInTheme {
+
     // MARK: - Colors
     enum Colors {
-        static let background     = Color(hex: "0A0A0A")   // near-black
-        static let surface        = Color(hex: "141414")   // card background
-        static let surfaceElevated = Color(hex: "1C1C1E")  // slightly lighter card
-        static let border         = Color(hex: "2C2C2E")   // subtle separator
-        static let accent         = Color(hex: "D4A843")   // warm gold — discipline, not aggression
-        static let accentRed      = Color(hex: "E8453C")   // failure / warning
-        static let accentGreen    = Color(hex: "34C759")   // success
-        static let accentOrange   = Color(hex: "FF9500")   // caution
-        static let textPrimary    = Color.white
-        static let textSecondary  = Color(hex: "8E8E93")
-        static let textTertiary   = Color(hex: "48484A")
+        // Backgrounds — dark navy-black with visible depth between layers
+        static let background      = Color(hex: "0C0F1A")  // deep navy
+        static let surface         = Color(hex: "141A28")  // card bg — visible vs background
+        static let surfaceElevated = Color(hex: "1C2438")  // modal / elevated card
+        static let border          = Color(hex: "28334E")  // separator
+
+        // Primary accent — electric cornflower blue
+        // Reads as "systems / precision / control" without being childish
+        static let accent          = Color(hex: "4F8EF7")  // main CTA, highlights
+        static let accentDim       = Color(hex: "2C5299")  // subtle accent bg tint
+
+        // Status colors — bright and unambiguous
+        static let accentRed       = Color(hex: "FF453A")  // failure / danger
+        static let accentGreen     = Color(hex: "30D158")  // success / on-track
+        static let accentOrange    = Color(hex: "FF9F0A")  // caution / moderate risk
+        static let accentYellow    = Color(hex: "FFD60A")  // warning
+
+        // Text hierarchy
+        static let textPrimary     = Color(hex: "F0F4FF")  // near-white with slight blue tint
+        static let textSecondary   = Color(hex: "7D8BA8")  // muted blue-gray
+        static let textTertiary    = Color(hex: "3D4860")  // very dim, labels
     }
 
     // MARK: - Typography
@@ -34,11 +46,11 @@ enum LockInTheme {
 
     // MARK: - Spacing
     enum Spacing {
-        static let xs: CGFloat   = 4
-        static let sm: CGFloat   = 8
-        static let md: CGFloat   = 16
-        static let lg: CGFloat   = 24
-        static let xl: CGFloat   = 32
+        static let xs: CGFloat  = 4
+        static let sm: CGFloat  = 8
+        static let md: CGFloat  = 16
+        static let lg: CGFloat  = 24
+        static let xl: CGFloat  = 32
     }
 
     // MARK: - Corner Radius
@@ -49,7 +61,7 @@ enum LockInTheme {
     }
 }
 
-// MARK: - Color Hex Extension
+// MARK: - Color Hex Init
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -57,20 +69,16 @@ extension Color {
         Scanner(string: hex).scanHexInt64(&int)
         let a, r, g, b: UInt64
         switch hex.count {
-        case 3:
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6:
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8:
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (255, 0, 0, 0)
+        case 3:  (a, r, g, b) = (255, (int >> 8)*17, (int >> 4 & 0xF)*17, (int & 0xF)*17)
+        case 6:  (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8:  (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default: (a, r, g, b) = (255, 0, 0, 0)
         }
-        self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
+        self.init(.sRGB, red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255, opacity: Double(a)/255)
     }
 }
 
-// MARK: - View Modifiers
+// MARK: - Card modifier
 struct CardStyle: ViewModifier {
     var elevated: Bool = false
     func body(content: Content) -> some View {
@@ -80,26 +88,23 @@ struct CardStyle: ViewModifier {
     }
 }
 
+// MARK: - Section header
 struct SectionHeaderStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 11, weight: .semibold, design: .default))
-            .foregroundColor(LockInTheme.Colors.textSecondary)
-            .tracking(1.5)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(LockInTheme.Colors.textTertiary)
+            .tracking(1.8)
             .textCase(.uppercase)
     }
 }
 
 extension View {
-    func cardStyle(elevated: Bool = false) -> some View {
-        modifier(CardStyle(elevated: elevated))
-    }
-    func sectionHeaderStyle() -> some View {
-        modifier(SectionHeaderStyle())
-    }
+    func cardStyle(elevated: Bool = false) -> some View { modifier(CardStyle(elevated: elevated)) }
+    func sectionHeaderStyle() -> some View { modifier(SectionHeaderStyle()) }
 }
 
-// MARK: - Reusable stat row
+// MARK: - Shared stat row
 struct StatRow: View {
     let label: String
     let value: String

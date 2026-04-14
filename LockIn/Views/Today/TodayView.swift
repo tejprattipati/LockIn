@@ -18,6 +18,7 @@ struct TodayView: View {
     @State private var showWeighInSheet = false
     @State private var showCalorieSheet = false
     @State private var showInterveneTab = false
+    @State private var showScreenshotImport = false
     @State private var newWeight: String = ""
     @State private var newCalories: String = ""
     @State private var newProtein: String = ""
@@ -103,6 +104,11 @@ struct TodayView: View {
                     currentProtein: todayLog?.actualProtein,
                     onSave: saveCalories
                 )
+            }
+            .sheet(isPresented: $showScreenshotImport) {
+                ScreenshotImportView(isPresented: $showScreenshotImport) { cal, prot in
+                    saveCalories(calories: cal, protein: prot)
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -341,6 +347,18 @@ struct TodayView: View {
                 }
                 QuickActionButton(icon: "flame", label: "Log Cals") {
                     showCalorieSheet = true
+                }
+            }
+
+            HStack(spacing: LockInTheme.Spacing.sm) {
+                QuickActionButton(icon: "camera.viewfinder", label: "Import Screenshot") {
+                    showScreenshotImport = true
+                }
+                QuickActionButton(icon: "fork.knife", label: "Log Food MND") {
+                    Task { await mndManager.open(.logFood) }
+                }
+                QuickActionButton(icon: "chart.bar", label: "Open MND") {
+                    Task { await mndManager.open(.openApp) }
                 }
             }
         }

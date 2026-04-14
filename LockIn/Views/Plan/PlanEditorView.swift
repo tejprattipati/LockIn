@@ -13,6 +13,7 @@ struct PlanEditorView: View {
     @State private var showGoalEditor = false
     @State private var showMealEditor: MealTemplate? = nil
     @State private var showMotivationEditor = false
+    @State private var showNewTemplateSheet = false
 
     private var goalProfile: GoalProfile? { goalProfiles.first }
 
@@ -53,6 +54,9 @@ struct PlanEditorView: View {
                 if let goal = goalProfile {
                     MotivationEditorSheet(goal: goal, isPresented: $showMotivationEditor)
                 }
+            }
+            .sheet(isPresented: $showNewTemplateSheet) {
+                NewMealTemplateSheet(isPresented: $showNewTemplateSheet)
             }
         }
         .preferredColorScheme(.dark)
@@ -110,8 +114,11 @@ struct PlanEditorView: View {
                     showMealEditor = template
                 } label: {
                     HStack {
+                        Image(systemName: template.slot.icon)
+                            .foregroundColor(LockInTheme.Colors.accent)
+                            .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(template.slot.rawValue)
+                            Text(template.name)
                                 .font(LockInTheme.Font.label(14))
                                 .foregroundColor(LockInTheme.Colors.textPrimary)
                             Text("\(template.calorieTarget) kcal · \(template.proteinTarget)g protein")
@@ -126,6 +133,24 @@ struct PlanEditorView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .onDelete { offsets in
+                let sorted = mealTemplates.sorted { $0.slot.sortOrder < $1.slot.sortOrder }
+                for i in offsets { modelContext.delete(sorted[i]) }
+                try? modelContext.save()
+            }
+
+            Button {
+                showNewTemplateSheet = true
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(LockInTheme.Colors.accent)
+                    Text("Add Meal Template")
+                        .font(LockInTheme.Font.label(14))
+                        .foregroundColor(LockInTheme.Colors.accent)
+                }
+            }
+            .buttonStyle(.plain)
         } header: {
             Text("MEAL TEMPLATES")
                 .sectionHeaderStyle()
@@ -328,6 +353,139 @@ struct MotivationEditorSheet: View {
                     }
                     .foregroundColor(LockInTheme.Colors.accent)
                     .fontWeight(.semibold)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - New Meal Template Sheet
+struct NewMealTemplateSheet: View {
+    @Binding var isPresented: Bool
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var name: String = ""
+    @State private var slot: MealSlot = .meal1
+    @State private var calorieText: String = ""
+    @State private var proteinText: String = ""
+    @State private var notes: String = ""
+    @State private var foodInput: String = ""
+    @State private var foods: [String] = []
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LockInTheme.Colors.background.ignoresSafeArea()
+                Form {
+                    Section("TEMPLATE NAME") {
+                        TextField("e.g. High Protein Lunch", text: $name)
+                            .font(LockInTheme.Font.label(14))
+                            .foregroundColor(LockInTheme.Colors.textPrimary)
+                    }
+                    .listRowBackground(LockInTheme.Colors.surface)
+
+                    Section("MEAL SLOT") {
+                        Picker("Slot", selection: $slot) {
+                            ForEach(MealSlot.allCases) { s in
+                                Text(s.rawValue).tag(s)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(LockInTheme.Colors.accent)
+                    }
+                    .listRowBackground(LockInTheme.Colors.surface)
+
+                    Section("TARGETS") {
+                        HStack {
+                            Text("Calories")
+                            Spacer()
+                            TextField("0", text: $calorieText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .font(LockInTheme.Font.mono(14))
+                                .foregroundColor(LockInTheme.Colors.accent)
+                            Text("kcal").foregroundColor(LockInTheme.Colors.textSecondary)
+                        }
+                        HStack {
+                            Text("Protein")
+                            Spacer()
+                            TextField("0", text: $proteinText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .font(LockInTheme.Font.mono(14))
+                                .foregroundColor(LockInTheme.Colors.accent)
+                            Text("g").foregroundColor(LockInTheme.Colors.textSecondary)
+                        }
+                    }
+                    .listRowBackground(LockInTheme.Colors.surface)
+
+                    Section {
+                        ForEach(foods, id: \.self) { food in
+                            HStack {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 5))
+                                    .foregroundColor(LockInTheme.Colors.accent)
+                                Text(food)
+                                    .font(LockInTheme.Font.label(13))
+                                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                            }
+                        }
+                        .onDelete { offsets in foods.remove(atOffsets: offsets) }
+
+                        HStack {
+                            TextField("Add food...", text: $foodInput)
+                                .font(LockInTheme.Font.label(13))
+                            Button {
+                                let t = foodInput.trimmingCharacters(in: .whitespaces)
+                                guard !t.isEmpty else { return }
+                                foods.append(t)
+                                foodInput = ""
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(LockInTheme.Colors.accent)
+                            }
+                        }
+                    } header: {
+                        Text("FOODS")
+                    }
+                    .listRowBackground(LockInTheme.Colors.surface)
+
+                    Section("NOTES") {
+                        TextEditor(text: $notes)
+                            .frame(minHeight: 60)
+                            .font(.system(size: 13))
+                            .foregroundColor(LockInTheme.Colors.textSecondary)
+                    }
+                    .listRowBackground(LockInTheme.Colors.surface)
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("New Template")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { isPresented = false }
+                        .foregroundColor(LockInTheme.Colors.textSecondary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add") {
+                        let template = MealTemplate(
+                            name: name.isEmpty ? slot.rawValue : name,
+                            slot: slot,
+                            suggestedFoods: foods,
+                            calorieTarget: Int(calorieText) ?? 0,
+                            proteinTarget: Int(proteinText) ?? 0,
+                            notes: notes,
+                            isActiveDefault: true
+                        )
+                        modelContext.insert(template)
+                        try? modelContext.save()
+                        isPresented = false
+                    }
+                    .foregroundColor(LockInTheme.Colors.accent)
+                    .fontWeight(.semibold)
+                    .disabled(name.isEmpty && calorieText.isEmpty)
                 }
             }
         }

@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- CFBundle keys (Xcode-generated, required) -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -18,5 +19,56 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+
+	<!-- HealthKit usage descriptions — required for device install -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>LockIn reads body weight, steps, and workout data from Apple Health to update your daily metrics and calorie calculations. No data is sent off-device.</string>
+
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>LockIn can optionally write body weight measurements to Apple Health when you log a weigh-in.</string>
+
+	<!-- MyNetDiary deep-link URL scheme — must be whitelisted for canOpenURL() to work -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>mynetdiary</string>
+	</array>
+
+	<!-- App Intents / Siri -->
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).openAntiBingeFlow</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).markWeighIn</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).showNightPlan</string>
+	</array>
+
+	<!--
+	    UIRequiresFullScreen suppresses both Xcode warnings:
+	    1. "All interface orientations must be supported unless the app requires full screen"
+	    2. "A launch configuration or launch storyboard must be provided unless the app requires full screen"
+	-->
+	<key>UIRequiresFullScreen</key>
+	<true/>
+
+	<!-- Portrait-only. UIRequiresFullScreen above makes this valid without warnings. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<!-- Blank launch screen -->
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<!--
+	    Scene manifest for SwiftUI @main.
+	    UISceneConfigurations is intentionally omitted — SwiftUI @main handles
+	    scene setup automatically. An empty UISceneConfigurations dict was causing
+	    iOS to render the app in a legacy letterboxed rect instead of full display.
+	-->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
 </dict>
 </plist>

@@ -63,47 +63,6 @@ targets:
         embed: false
       - framework: UserNotifications.framework
         embed: false
-      - framework: WidgetKit.framework
-        embed: false
-      - target: LockInWidget
-        embed: true
 
     preBuildScripts: []
     postBuildScripts: []
-
-  LockInWidget:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "17.0"
-
-    info:
-      path: LockInWidget/Info.plist
-
-    entitlements:
-      path: LockInWidget/LockInWidget.entitlements
-
-    sources:
-      - path: LockInWidget
-
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.personal.LockIn.widget
-        PRODUCT_NAME: LockInWidget
-        DEVELOPMENT_TEAM: ""
-        CODE_SIGN_STYLE: Automatic
-        SKIP_INSTALL: YES
-
-      configs:
-        Debug:
-          DEBUG_INFORMATION_FORMAT: dwarf
-          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
-        Release:
-          DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
-          SWIFT_OPTIMIZATION_LEVEL: "-O"
-
-    dependencies:
-      - framework: WidgetKit.framework
-        embed: false
-      - framework: SwiftUI.framework
-        embed: false

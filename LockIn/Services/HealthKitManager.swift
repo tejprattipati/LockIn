@@ -181,7 +181,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Map HKWorkoutActivityType to WorkoutType
-    private static func mapWorkoutType(_ hkType: HKWorkoutActivityType) -> WorkoutType {
+    nonisolated private static func mapWorkoutType(_ hkType: HKWorkoutActivityType) -> WorkoutType {
         switch hkType {
         case .basketball:   return .basketball
         case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:

@@ -106,9 +106,9 @@ struct CutProgressView: View {
                 let poundsToGo = current - goal.targetWeight
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: LockInTheme.Spacing.sm) {
-                    MetricCard(label: "CURRENT", value: String(format: "%.1f", current))
-                    MetricCard(label: "7-DAY AVG", value: avg7 != nil ? String(format: "%.1f", avg7!) : "—")
-                    MetricCard(label: "TO GOAL", value: String(format: "%.1f", poundsToGo) + " lb",
+                    MetricCard(label: "CURRENT", value: String(format: "%.1f", current), sublabel: "")
+                    MetricCard(label: "7-DAY AVG", value: avg7 != nil ? String(format: "%.1f", avg7!) : "—", sublabel: "")
+                    MetricCard(label: "TO GOAL", value: String(format: "%.1f", poundsToGo) + " lb", sublabel: "",
                                valueColor: poundsToGo > 0 ? LockInTheme.Colors.accentOrange : LockInTheme.Colors.accentGreen)
                 }
             }

@@ -114,7 +114,7 @@ struct SettingsView: View {
             if notificationManager.authorizationStatus != .authorized {
                 Button("Request Notification Permission") {
                     Task {
-                        await notificationManager.requestAuthorization()
+                        _ = await notificationManager.requestAuthorization()
                         notificationAuthRequested = true
                     }
                 }

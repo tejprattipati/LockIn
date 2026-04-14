@@ -95,6 +95,7 @@ struct OpenMyNetDiaryIntent: AppIntent {
     static var description = IntentDescription("Attempts to open MyNetDiary via deep link.")
     static var openAppWhenRun: Bool = false
 
+    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let manager = MyNetDiaryManager.shared
         let result = await manager.open(.openApp)

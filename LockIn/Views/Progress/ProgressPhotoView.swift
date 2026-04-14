@@ -1,6 +1,10 @@
 // ProgressPhotoView.swift
 // Progress photo timeline with Gemini AI analysis of body composition changes.
 // Photos stored locally in Documents/ProgressPhotos/ — no cloud, no database.
+//
+// IMPORTANT: This view has NO NavigationStack wrapper — it is pushed into
+// CutProgressView's NavigationStack via NavigationLink. Nested NavigationStacks
+// are not supported in SwiftUI.
 
 import SwiftUI
 import SwiftData
@@ -15,77 +19,72 @@ struct ProgressPhotoView: View {
     @State private var showCamera = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedDetail: ProgressPhoto?
-    @State private var weightInput: String = ""
     @State private var pendingImage: UIImage?
     @State private var showSaveSheet = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                LockInTheme.Colors.background.ignoresSafeArea()
-                if photos.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible()), GridItem(.flexible())],
-                            spacing: LockInTheme.Spacing.sm
-                        ) {
-                            ForEach(photos) { photo in
-                                PhotoThumbnailCard(photo: photo)
-                                    .onTapGesture { selectedDetail = photo }
-                            }
+        ZStack {
+            LockInTheme.Colors.background.ignoresSafeArea()
+            if photos.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible()), GridItem(.flexible())],
+                        spacing: LockInTheme.Spacing.sm
+                    ) {
+                        ForEach(photos) { photo in
+                            PhotoThumbnailCard(photo: photo)
+                                .onTapGesture { selectedDetail = photo }
                         }
-                        .padding(LockInTheme.Spacing.md)
                     }
+                    .padding(LockInTheme.Spacing.md)
                 }
             }
-            .navigationTitle("Progress Photos")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSourcePicker = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .foregroundColor(LockInTheme.Colors.accent)
-                    }
+        }
+        .navigationTitle("Progress Photos")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showSourcePicker = true } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(LockInTheme.Colors.accent)
                 }
             }
-            .confirmationDialog("Add Progress Photo", isPresented: $showSourcePicker, titleVisibility: .visible) {
-                Button("Take Photo") { showCamera = true }
-                Button("Choose from Library") { showPhotoPicker = true }
-                Button("Cancel", role: .cancel) {}
-            }
-            .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhoto, matching: .images)
-            .onChange(of: selectedPhoto) { _, item in
-                Task {
-                    if let item, let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        pendingImage = image
-                        showSaveSheet = true
-                    }
-                    selectedPhoto = nil
-                }
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraPickerView { image in
+        }
+        .confirmationDialog("Add Progress Photo", isPresented: $showSourcePicker, titleVisibility: .visible) {
+            Button("Take Photo")            { showCamera = true }
+            Button("Choose from Library")   { showPhotoPicker = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhoto, matching: .images)
+        .onChange(of: selectedPhoto) { _, item in
+            Task {
+                guard let item else { return }
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
                     pendingImage = image
                     showSaveSheet = true
                 }
-            }
-            .sheet(isPresented: $showSaveSheet) {
-                if let img = pendingImage {
-                    SavePhotoSheet(image: img, isPresented: $showSaveSheet) { weight, notes in
-                        savePhoto(img, bodyWeight: weight, notes: notes)
-                    }
-                }
-            }
-            .sheet(item: $selectedDetail) { photo in
-                PhotoDetailView(photo: photo, allPhotos: photos)
+                selectedPhoto = nil
             }
         }
-        .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPickerView { image in
+                pendingImage = image
+                showSaveSheet = true
+            }
+        }
+        .sheet(isPresented: $showSaveSheet) {
+            if let img = pendingImage {
+                SavePhotoSheet(image: img, isPresented: $showSaveSheet) { weight, notes in
+                    savePhoto(img, bodyWeight: weight, notes: notes)
+                }
+            }
+        }
+        .sheet(item: $selectedDetail) { photo in
+            PhotoDetailView(photo: photo, allPhotos: photos)
+        }
     }
 
     // MARK: - Empty State
@@ -134,7 +133,6 @@ struct ProgressPhotoView: View {
 // MARK: - Thumbnail Card
 struct PhotoThumbnailCard: View {
     let photo: ProgressPhoto
-
     private var image: UIImage? { ProgressPhotoStorage.load(filename: photo.filename) }
 
     var body: some View {
@@ -153,7 +151,6 @@ struct PhotoThumbnailCard: View {
                     .aspectRatio(3/4, contentMode: .fit)
                     .cornerRadius(LockInTheme.Radius.md)
             }
-
             VStack(alignment: .leading, spacing: 2) {
                 Text(shortDate(photo.date))
                     .font(LockInTheme.Font.mono(11, weight: .semibold))
@@ -178,7 +175,7 @@ struct PhotoThumbnailCard: View {
     }
 }
 
-// MARK: - Photo Detail View
+// MARK: - Photo Detail View (presented as sheet — can have its own NavigationStack)
 struct PhotoDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -191,7 +188,6 @@ struct PhotoDetailView: View {
 
     private var image: UIImage? { ProgressPhotoStorage.load(filename: photo.filename) }
 
-    // The photo taken just before this one (for comparison)
     private var previousPhoto: ProgressPhoto? {
         let sorted = allPhotos.sorted { $0.date < $1.date }
         guard let idx = sorted.firstIndex(where: { $0.id == photo.id }), idx > 0 else { return nil }
@@ -212,7 +208,6 @@ struct PhotoDetailView: View {
                                 .padding(.horizontal, LockInTheme.Spacing.md)
                         }
 
-                        // Metadata
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(fullDate(photo.date))
@@ -233,16 +228,12 @@ struct PhotoDetailView: View {
                         }
                         .padding(.horizontal, LockInTheme.Spacing.md)
 
-                        // AI Analysis
                         VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
                             HStack {
-                                Text("AI ANALYSIS")
-                                    .sectionHeaderStyle()
+                                Text("AI ANALYSIS").sectionHeaderStyle()
                                 Spacer()
                                 if isAnalyzing {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                        .tint(LockInTheme.Colors.accent)
+                                    ProgressView().scaleEffect(0.7).tint(LockInTheme.Colors.accent)
                                 }
                             }
 
@@ -262,7 +253,7 @@ struct PhotoDetailView: View {
                                     .padding(LockInTheme.Spacing.md)
                                     .cardStyle()
                             } else {
-                                Text("No analysis yet.")
+                                Text("No analysis yet. Tap below to run AI analysis.")
                                     .font(.system(size: 12))
                                     .foregroundColor(LockInTheme.Colors.textTertiary)
                                     .padding(LockInTheme.Spacing.md)
@@ -289,8 +280,7 @@ struct PhotoDetailView: View {
 
                         if !photo.notes.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("NOTES")
-                                    .sectionHeaderStyle()
+                                Text("NOTES").sectionHeaderStyle()
                                 Text(photo.notes)
                                     .font(LockInTheme.Font.label(13))
                                     .foregroundColor(LockInTheme.Colors.textSecondary)
@@ -301,7 +291,6 @@ struct PhotoDetailView: View {
                             .padding(.horizontal, LockInTheme.Spacing.md)
                         }
 
-                        // Delete
                         Button(role: .destructive) {
                             ProgressPhotoStorage.delete(filename: photo.filename)
                             modelContext.delete(photo)
@@ -358,7 +347,7 @@ struct PhotoDetailView: View {
     }
 }
 
-// MARK: - Save Photo Sheet
+// MARK: - Save Photo Sheet (presented as sheet — has its own NavigationStack)
 struct SavePhotoSheet: View {
     let image: UIImage
     @Binding var isPresented: Bool
@@ -418,8 +407,7 @@ struct SavePhotoSheet: View {
                     .padding(.horizontal)
 
                     Button {
-                        let w = Double(weightText)
-                        onSave(w, notes)
+                        onSave(Double(weightText), notes)
                         isPresented = false
                     } label: {
                         Text("SAVE PHOTO")
@@ -431,7 +419,6 @@ struct SavePhotoSheet: View {
                             .cornerRadius(LockInTheme.Radius.md)
                     }
                     .padding(.horizontal)
-
                     Spacer()
                 }
                 .padding(.top, LockInTheme.Spacing.md)
@@ -471,9 +458,7 @@ struct CameraPickerView: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let img = info[.originalImage] as? UIImage {
-                parent.onCapture(img)
-            }
+            if let img = info[.originalImage] as? UIImage { parent.onCapture(img) }
             parent.dismiss()
         }
 

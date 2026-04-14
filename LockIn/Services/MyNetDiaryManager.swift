@@ -39,7 +39,7 @@ final class MyNetDiaryManager: ObservableObject {
     /// the user can at least tap "Open" from there.
     @discardableResult
     func open(_ action: MNDAction) async -> MNDIntegrationResult {
-        let schemes = deepLinksFor(action: action)
+        let schemes = deepLinksFor(action)
 
         for scheme in schemes {
             guard let url = URL(string: scheme) else { continue }

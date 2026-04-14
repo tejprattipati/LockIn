@@ -13,6 +13,8 @@ final class MealTemplate {
     var suggestedFoods: [String]
     var calorieTarget: Int
     var proteinTarget: Int   // grams
+    var carbTarget: Int
+    var fatTarget: Int
     var notes: String
     var isActiveDefault: Bool
     var createdAt: Date
@@ -25,6 +27,8 @@ final class MealTemplate {
         suggestedFoods: [String] = [],
         calorieTarget: Int = 0,
         proteinTarget: Int = 0,
+        carbTarget: Int = 0,
+        fatTarget: Int = 0,
         notes: String = "",
         isActiveDefault: Bool = true,
         createdAt: Date = .now,
@@ -36,6 +40,8 @@ final class MealTemplate {
         self.suggestedFoods = suggestedFoods
         self.calorieTarget = calorieTarget
         self.proteinTarget = proteinTarget
+        self.carbTarget = carbTarget
+        self.fatTarget = fatTarget
         self.notes = notes
         self.isActiveDefault = isActiveDefault
         self.createdAt = createdAt

@@ -151,6 +151,11 @@ enum ReminderType: String, Codable, CaseIterable {
     case bedtimeWrapUp       = "Bedtime Wrap-Up"
     case loggingReminder     = "Log in MyNetDiary"
     case workoutReminder     = "Workout Reminder"
+    // Smart reminders — only fire if action not yet taken today
+    case weighInNoon         = "Weigh-In Reminder (Noon)"
+    case weighIn6pm          = "Weigh-In Reminder (6pm)"
+    case foodLog9pm          = "Food Log Check (9pm)"
+    case foodLog10pm         = "Food Log Check (10pm)"
 
     var defaultHour: Int {
         switch self {
@@ -162,10 +167,23 @@ enum ReminderType: String, Codable, CaseIterable {
         case .bedtimeWrapUp:     return 23
         case .loggingReminder:   return 20
         case .workoutReminder:   return 17
+        case .weighInNoon:       return 12
+        case .weighIn6pm:        return 18
+        case .foodLog9pm:        return 21
+        case .foodLog10pm:       return 22
         }
     }
 
     var defaultMinute: Int { return 0 }
+
+    /// True for reminders that should be skipped if the corresponding action is done today.
+    var isSmartWeighIn: Bool {
+        self == .weighInNoon || self == .weighIn6pm
+    }
+
+    var isSmartFoodLog: Bool {
+        self == .foodLog9pm || self == .foodLog10pm
+    }
 }
 
 // MARK: - Tonight Risk Level

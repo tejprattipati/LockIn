@@ -1,5 +1,6 @@
 // PlanEditorView.swift
 // Configure daily targets, meal templates, and motivational content.
+// Templates can be added to today's log directly from this view.
 
 import SwiftUI
 import SwiftData
@@ -7,8 +8,9 @@ import SwiftData
 struct PlanEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var goalProfiles: [GoalProfile]
-    @Query(filter: #Predicate<MealTemplate> { $0.isActiveDefault == true })
-    private var mealTemplates: [MealTemplate]
+    // Show ALL templates (active and inactive) so the user can manage them freely
+    @Query private var mealTemplates: [MealTemplate]
+    @Query(sort: \DailyLog.date, order: .reverse) private var dailyLogs: [DailyLog]
 
     @State private var showGoalEditor = false
     @State private var showMealEditor: MealTemplate? = nil
@@ -16,6 +18,10 @@ struct PlanEditorView: View {
     @State private var showNewTemplateSheet = false
 
     private var goalProfile: GoalProfile? { goalProfiles.first }
+    private var todayLog: DailyLog? { dailyLogs.first { Calendar.current.isDateInToday($0.date) } }
+    private var sortedTemplates: [MealTemplate] {
+        mealTemplates.sorted { $0.slot.sortOrder < $1.slot.sortOrder }
+    }
 
     var body: some View {
         NavigationStack {
@@ -37,6 +43,14 @@ struct PlanEditorView: View {
                         .font(LockInTheme.Font.mono(14, weight: .bold))
                         .foregroundColor(LockInTheme.Colors.accent)
                         .tracking(3)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showNewTemplateSheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundColor(LockInTheme.Colors.accent)
+                    }
                 }
             }
             .sheet(isPresented: $showGoalEditor) {
@@ -90,95 +104,116 @@ struct PlanEditorView: View {
                 HStack {
                     Text("Target Weight")
                     Spacer()
-                    Text("\(String(format: "%.0f", goal.targetWeight)) lb")
+                    Text(String(format: "%.0f lb", goal.targetWeight))
                         .font(LockInTheme.Font.mono(13))
                         .foregroundColor(LockInTheme.Colors.textSecondary)
                 }
-                Button("Edit Targets & Goal") {
-                    showGoalEditor = true
-                }
-                .foregroundColor(LockInTheme.Colors.accent)
+                Button("Edit Targets & Goal") { showGoalEditor = true }
+                    .foregroundColor(LockInTheme.Colors.accent)
             }
         } header: {
-            Text("DAILY TARGETS")
-                .sectionHeaderStyle()
+            Text("DAILY TARGETS").sectionHeaderStyle()
         }
         .listRowBackground(LockInTheme.Colors.surface)
     }
 
-    // MARK: - Meal Templates
+    // MARK: - Meal Templates Section
     private var mealTemplatesSection: some View {
         Section {
-            ForEach(mealTemplates.sorted { $0.slot.sortOrder < $1.slot.sortOrder }) { template in
-                Button {
-                    showMealEditor = template
-                } label: {
-                    HStack {
-                        Image(systemName: template.slot.icon)
-                            .foregroundColor(LockInTheme.Colors.accent)
-                            .frame(width: 20)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(template.name)
-                                .font(LockInTheme.Font.label(14))
-                                .foregroundColor(LockInTheme.Colors.textPrimary)
-                            Text("\(template.calorieTarget) kcal · \(template.proteinTarget)g protein")
-                                .font(.system(size: 11))
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundColor(LockInTheme.Colors.textTertiary)
-                    }
-                }
-                .buttonStyle(.plain)
+            ForEach(sortedTemplates) { template in
+                templateRow(template)
             }
             .onDelete { offsets in
-                let sorted = mealTemplates.sorted { $0.slot.sortOrder < $1.slot.sortOrder }
-                for i in offsets { modelContext.delete(sorted[i]) }
+                for i in offsets { modelContext.delete(sortedTemplates[i]) }
                 try? modelContext.save()
             }
-
-            Button {
-                showNewTemplateSheet = true
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(LockInTheme.Colors.accent)
-                    Text("Add Meal Template")
-                        .font(LockInTheme.Font.label(14))
-                        .foregroundColor(LockInTheme.Colors.accent)
-                }
-            }
-            .buttonStyle(.plain)
         } header: {
-            Text("MEAL TEMPLATES")
-                .sectionHeaderStyle()
+            Text("MEAL TEMPLATES").sectionHeaderStyle()
         } footer: {
-            Text("These are your default meal templates. Tap any to edit foods, targets, and notes.")
+            Text("Swipe left to delete. Tap to edit. Use + in top-right to add new templates.")
                 .font(.system(size: 11))
                 .foregroundColor(LockInTheme.Colors.textTertiary)
         }
         .listRowBackground(LockInTheme.Colors.surface)
     }
 
+    // Row — plain HStack with trailing edit chevron + add-to-today button
+    // IMPORTANT: No Button wrapper around the row — it interferes with swipe-to-delete.
+    @ViewBuilder
+    private func templateRow(_ template: MealTemplate) -> some View {
+        HStack(spacing: LockInTheme.Spacing.sm) {
+            Image(systemName: template.slot.icon)
+                .foregroundColor(LockInTheme.Colors.accent)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(template.name)
+                    .font(LockInTheme.Font.label(14))
+                    .foregroundColor(LockInTheme.Colors.textPrimary)
+                HStack(spacing: 6) {
+                    Text("\(template.calorieTarget) kcal")
+                        .font(.system(size: 11))
+                        .foregroundColor(LockInTheme.Colors.textSecondary)
+                    if template.proteinTarget > 0 {
+                        Text("· P \(template.proteinTarget)g")
+                            .font(.system(size: 11))
+                            .foregroundColor(LockInTheme.Colors.accentGreen)
+                    }
+                    if template.carbTarget > 0 {
+                        Text("C \(template.carbTarget)g")
+                            .font(.system(size: 11))
+                            .foregroundColor(LockInTheme.Colors.accentOrange)
+                    }
+                    if template.fatTarget > 0 {
+                        Text("F \(template.fatTarget)g")
+                            .font(.system(size: 11))
+                            .foregroundColor(LockInTheme.Colors.accentYellow)
+                    }
+                }
+            }
+
+            Spacer()
+
+            // "Add to today" button
+            Button {
+                addToToday(template)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: isInToday(template) ? "checkmark.circle.fill" : "plus.circle")
+                        .font(.system(size: 14))
+                    Text(isInToday(template) ? "In Today" : "Add")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(isInToday(template) ? LockInTheme.Colors.accentGreen : LockInTheme.Colors.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background((isInToday(template) ? LockInTheme.Colors.accentGreen : LockInTheme.Colors.accent).opacity(0.12))
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+
+            // Edit chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11))
+                .foregroundColor(LockInTheme.Colors.textTertiary)
+                .onTapGesture { showMealEditor = template }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showMealEditor = template }
+    }
+
     // MARK: - Motivation Section
     private var motivationSection: some View {
         Section {
             if let goal = goalProfile {
-                VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-                    Text(goal.motivationStatement)
-                        .font(LockInTheme.Font.label(13))
-                        .foregroundColor(LockInTheme.Colors.textSecondary)
-                }
-                Button("Edit Motivation & Penalty Text") {
-                    showMotivationEditor = true
-                }
-                .foregroundColor(LockInTheme.Colors.accent)
+                Text(goal.motivationStatement)
+                    .font(LockInTheme.Font.label(13))
+                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                Button("Edit Motivation & Penalty Text") { showMotivationEditor = true }
+                    .foregroundColor(LockInTheme.Colors.accent)
             }
         } header: {
-            Text("MOTIVATION")
-                .sectionHeaderStyle()
+            Text("MOTIVATION").sectionHeaderStyle()
         }
         .listRowBackground(LockInTheme.Colors.surface)
     }
@@ -199,14 +234,31 @@ struct PlanEditorView: View {
                 }
             }
         } header: {
-            Text("RED-FLAG FOODS")
-                .sectionHeaderStyle()
+            Text("RED-FLAG FOODS").sectionHeaderStyle()
         } footer: {
-            Text("These are your known binge triggers. Seeing them in the Intervene flow is intentional.")
+            Text("Known binge triggers. Seeing them in the Intervene flow is intentional.")
                 .font(.system(size: 11))
                 .foregroundColor(LockInTheme.Colors.textTertiary)
         }
         .listRowBackground(LockInTheme.Colors.surface)
+    }
+
+    // MARK: - Add to Today Logic
+    private func isInToday(_ template: MealTemplate) -> Bool {
+        guard let log = todayLog else { return false }
+        return log.mealEvents.contains { $0.slot == template.slot && $0.name == template.name }
+    }
+
+    private func addToToday(_ template: MealTemplate) {
+        guard let log = todayLog else { return }
+        // Replace existing event for this slot if it came from a different template
+        if let existing = log.mealEvents.first(where: { $0.slot == template.slot }) {
+            modelContext.delete(existing)
+        }
+        let event = MealEvent.from(template: template)
+        event.dailyLog = log
+        log.mealEvents.append(event)
+        try? modelContext.save()
     }
 
     private func shortDate(_ date: Date) -> String {
@@ -240,8 +292,7 @@ struct GoalEditorSheet: View {
                                 .multilineTextAlignment(.trailing)
                                 .font(LockInTheme.Font.mono(14))
                                 .foregroundColor(LockInTheme.Colors.accent)
-                            Text("kcal")
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
+                            Text("kcal").foregroundColor(LockInTheme.Colors.textSecondary)
                         }
                         HStack {
                             Text("Protein")
@@ -251,8 +302,7 @@ struct GoalEditorSheet: View {
                                 .multilineTextAlignment(.trailing)
                                 .font(LockInTheme.Font.mono(14))
                                 .foregroundColor(LockInTheme.Colors.accent)
-                            Text("g")
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
+                            Text("g").foregroundColor(LockInTheme.Colors.textSecondary)
                         }
                     }
                     .listRowBackground(LockInTheme.Colors.surface)
@@ -267,14 +317,7 @@ struct GoalEditorSheet: View {
                                 .multilineTextAlignment(.trailing)
                                 .font(LockInTheme.Font.mono(14))
                                 .foregroundColor(LockInTheme.Colors.accent)
-                            Text("lb")
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
-                        HStack {
-                            Text("Target BF%")
-                            Spacer()
-                            Text("\(String(format: "%.0f", goal.targetBodyFatPercent))%")
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
+                            Text("lb").foregroundColor(LockInTheme.Colors.textSecondary)
                         }
                     }
                     .listRowBackground(LockInTheme.Colors.surface)
@@ -290,8 +333,8 @@ struct GoalEditorSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        if let cal = Int(calTarget) { goal.dailyCalorieTarget = cal }
-                        if let prot = Int(protTarget) { goal.dailyProteinTarget = prot }
+                        if let cal = Int(calTarget)     { goal.dailyCalorieTarget = cal }
+                        if let prot = Int(protTarget)   { goal.dailyProteinTarget = prot }
                         if let tw = Double(targetWeight) { goal.targetWeight = tw }
                         goal.updatedAt = .now
                         try? modelContext.save()
@@ -302,8 +345,8 @@ struct GoalEditorSheet: View {
                 }
             }
             .onAppear {
-                calTarget = String(goal.dailyCalorieTarget)
-                protTarget = String(goal.dailyProteinTarget)
+                calTarget    = String(goal.dailyCalorieTarget)
+                protTarget   = String(goal.dailyProteinTarget)
                 targetWeight = String(format: "%.0f", goal.targetWeight)
             }
         }
@@ -369,6 +412,8 @@ struct NewMealTemplateSheet: View {
     @State private var slot: MealSlot = .meal1
     @State private var calorieText: String = ""
     @State private var proteinText: String = ""
+    @State private var carbText: String = ""
+    @State private var fatText: String = ""
     @State private var notes: String = ""
     @State private var foodInput: String = ""
     @State private var foods: [String] = []
@@ -396,27 +441,11 @@ struct NewMealTemplateSheet: View {
                     }
                     .listRowBackground(LockInTheme.Colors.surface)
 
-                    Section("TARGETS") {
-                        HStack {
-                            Text("Calories")
-                            Spacer()
-                            TextField("0", text: $calorieText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .font(LockInTheme.Font.mono(14))
-                                .foregroundColor(LockInTheme.Colors.accent)
-                            Text("kcal").foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
-                        HStack {
-                            Text("Protein")
-                            Spacer()
-                            TextField("0", text: $proteinText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .font(LockInTheme.Font.mono(14))
-                                .foregroundColor(LockInTheme.Colors.accent)
-                            Text("g").foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
+                    Section("MACROS (per serving)") {
+                        macroRow(label: "Calories", unit: "kcal", text: $calorieText)
+                        macroRow(label: "Protein",  unit: "g",    text: $proteinText)
+                        macroRow(label: "Carbs",    unit: "g",    text: $carbText)
+                        macroRow(label: "Fat",      unit: "g",    text: $fatText)
                     }
                     .listRowBackground(LockInTheme.Colors.surface)
 
@@ -476,6 +505,8 @@ struct NewMealTemplateSheet: View {
                             suggestedFoods: foods,
                             calorieTarget: Int(calorieText) ?? 0,
                             proteinTarget: Int(proteinText) ?? 0,
+                            carbTarget:    Int(carbText)    ?? 0,
+                            fatTarget:     Int(fatText)     ?? 0,
                             notes: notes,
                             isActiveDefault: true
                         )
@@ -491,9 +522,24 @@ struct NewMealTemplateSheet: View {
         }
         .preferredColorScheme(.dark)
     }
+
+    private func macroRow(label: String, unit: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: text)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .font(LockInTheme.Font.mono(14))
+                .foregroundColor(LockInTheme.Colors.accent)
+                .frame(width: 70)
+            Text(unit).foregroundColor(LockInTheme.Colors.textSecondary)
+        }
+    }
 }
 
 #Preview {
     PlanEditorView()
-        .modelContainer(for: [GoalProfile.self, MealTemplate.self], inMemory: true)
+        .modelContainer(for: [GoalProfile.self, MealTemplate.self, DailyLog.self,
+                               MealEvent.self, ChecklistEntry.self], inMemory: true)
 }

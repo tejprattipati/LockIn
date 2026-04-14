@@ -33,7 +33,8 @@ final class NotificationManager: ObservableObject {
     func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge, .criticalAlert])
+            // criticalAlert omitted — requires Apple entitlement
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             await checkStatus()
             return granted
         } catch {
@@ -127,15 +128,34 @@ final class NotificationManager: ObservableObject {
     }
 
     // MARK: - Schedule All from Rules
-    func scheduleAll(from rules: [ReminderRule]) async {
+    /// isWeighedIn / isFoodLogged — when true, skip the smart follow-up reminders
+    /// for that action (they already happened today). Reminders will be rescheduled
+    /// on the next app launch once the new day starts.
+    func scheduleAll(from rules: [ReminderRule], isWeighedIn: Bool = false, isFoodLogged: Bool = false) async {
         let center = UNUserNotificationCenter.current()
-        // Remove old scheduled notifications
         center.removeAllPendingNotificationRequests()
         center.removeAllDeliveredNotifications()
 
         for rule in rules where rule.isEnabled {
+            if isWeighedIn && rule.type.isSmartWeighIn { continue }
+            if isFoodLogged && rule.type.isSmartFoodLog { continue }
             await schedule(rule: rule)
         }
+    }
+
+    // MARK: - Cancel smart reminders when action is done today
+    func cancelWeighInFollowUps() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [
+            "lockin.reminder.\(ReminderType.weighInNoon.rawValue)",
+            "lockin.reminder.\(ReminderType.weighIn6pm.rawValue)"
+        ])
+    }
+
+    func cancelFoodLoggingReminders() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [
+            "lockin.reminder.\(ReminderType.foodLog9pm.rawValue)",
+            "lockin.reminder.\(ReminderType.foodLog10pm.rawValue)"
+        ])
     }
 
     func schedule(rule: ReminderRule) async {
@@ -229,6 +249,10 @@ final class NotificationManager: ObservableObject {
         case .bedtimeWrapUp:     return "Day Wrap-Up"
         case .loggingReminder:   return "Log in MyNetDiary"
         case .workoutReminder:   return "Workout Window"
+        case .weighInNoon:       return "Still Haven't Weighed In"
+        case .weighIn6pm:        return "Last Chance to Weigh In Today"
+        case .foodLog9pm:        return "Food Not Logged Yet"
+        case .foodLog10pm:       return "Log Your Food — Final Reminder"
         }
     }
 
@@ -250,18 +274,27 @@ final class NotificationManager: ObservableObject {
             return "Open MyNetDiary and confirm today's calories and protein are logged."
         case .workoutReminder:
             return "Get your workout in. Even 30 minutes counts."
+        case .weighInNoon:
+            return "No weigh-in recorded yet. Step on the scale and log it in LockIn."
+        case .weighIn6pm:
+            return "Data point missing for today. Weigh in now even if it's late — better than nothing."
+        case .foodLog9pm:
+            return "You haven't imported today's food log. Open LockIn and import your MND screenshot."
+        case .foodLog10pm:
+            return "No nutrition data for today. Import your MyNetDiary screenshot now before you forget."
         }
     }
 
     private func categoryId(for type: ReminderType) -> String {
         switch type {
-        case .morningWeighIn:    return Category.weighIn.rawValue
-        case .meal1, .meal2:     return Category.mealLogging.rawValue
+        case .morningWeighIn, .weighInNoon, .weighIn6pm:
+            return Category.weighIn.rawValue
+        case .meal1, .meal2, .loggingReminder, .foodLog9pm, .foodLog10pm:
+            return Category.mealLogging.rawValue
         case .prePlanNightMeal:  return Category.nightWarning.rawValue
         case .nightAntiOrder:    return Category.antiOrder.rawValue
-        case .bedtimeWrapUp:     return Category.wrapUp.rawValue
-        case .loggingReminder:   return Category.mealLogging.rawValue
-        case .workoutReminder:   return Category.wrapUp.rawValue
+        case .bedtimeWrapUp, .workoutReminder:
+            return Category.wrapUp.rawValue
         }
     }
 }

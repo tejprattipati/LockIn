@@ -57,29 +57,30 @@ final class HealthKitManager: ObservableObject {
             }
         }
 
-        if granted { await checkPermissions() }
+        if granted {
+            // HealthKit does NOT expose read-authorization status for privacy reasons.
+            // authorizationStatus(for:) only reflects write (sharing) permission and
+            // returns .notDetermined for read-only requests. After the user completes
+            // the auth dialog successfully, mark all permissions granted and persist
+            // via UserDefaults so the status survives app restarts.
+            weightPermissionGranted = true
+            stepsPermissionGranted = true
+            workoutsPermissionGranted = true
+            UserDefaults.standard.set(true, forKey: "hk.authorized")
+        }
         return granted
     }
 
     // MARK: - Check Permissions
     func checkPermissions() async {
         guard isAvailable else { return }
-
-        // For quantity types, sharingAuthorized indicates write access was granted.
-        // HealthKit does not expose read-authorization status for privacy reasons.
-        // We use sharingAuthorized as a proxy — if the user completed the auth dialog
-        // and granted write, we assume read is also available.
-        // For read-only apps (no write), we infer from whether data can be fetched.
-        if let wt = weightType {
-            let status = store.authorizationStatus(for: wt)
-            weightPermissionGranted = (status == .sharingAuthorized)
+        // Read auth status is not queryable in HealthKit (privacy by design).
+        // Check the UserDefaults flag set after a successful requestAuthorization call.
+        if UserDefaults.standard.bool(forKey: "hk.authorized") {
+            weightPermissionGranted = true
+            stepsPermissionGranted = true
+            workoutsPermissionGranted = true
         }
-        if let st = stepsType {
-            let status = store.authorizationStatus(for: st)
-            stepsPermissionGranted = (status == .sharingAuthorized)
-        }
-        // Workout reads don't surface a checkable status; mark granted after auth dialog.
-        workoutsPermissionGranted = isAvailable
     }
 
     // MARK: - Read Latest Body Weight

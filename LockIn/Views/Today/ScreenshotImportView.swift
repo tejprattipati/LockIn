@@ -1,42 +1,40 @@
 // ScreenshotImportView.swift
-// Import a MyNetDiary screenshot and extract calorie/protein data using
-// Apple's on-device Vision OCR (VNRecognizeTextRequest). No external API needed.
+// Import a MyNetDiary food diary screenshot and extract macros using Gemini Vision.
+// Gemini 1.5 Flash reads the image and returns calories / protein / carbs / fat.
+// All four values are editable before confirming.
 //
-// How to use:
-//   1. In MyNetDiary, go to Diary → take a screenshot (or Food Report)
-//   2. Come back to LockIn → Today → tap "Import from Screenshot"
+// Usage:
+//   1. In MyNetDiary → go to Diary or Food Report → take a screenshot
+//   2. LockIn Today → Quick Actions → Import Screenshot
 //   3. Select the screenshot from your photo library
-//   4. LockIn reads the text, finds calories and protein, pre-fills the fields
-//   5. Confirm to save to today's log
+//   4. Tap "Analyze with AI" — Gemini extracts the numbers
+//   5. Review/adjust if needed → Confirm saves to today's log
 
 import SwiftUI
-import Vision
 import PhotosUI
-import SwiftData
 
 struct ScreenshotImportView: View {
     @Binding var isPresented: Bool
-    var onConfirm: (Int, Int) -> Void   // (calories, protein)
+    /// Called with (calories, protein, carbs, fat) when the user confirms
+    var onConfirm: (Int, Int, Int, Int) -> Void
 
-    @State private var selectedPhoto: PhotosPickerItem? = nil
-    @State private var selectedImage: UIImage? = nil
-    @State private var isProcessing = false
-    @State private var parsedCalories: Int? = nil
-    @State private var parsedProtein: Int? = nil
-    @State private var rawText: String = ""
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedImage: UIImage?
+    @State private var isAnalyzing = false
     @State private var parseStatus: ParseStatus = .idle
-    @State private var caloriesText: String = ""
-    @State private var proteinText: String = ""
-    @State private var showRawText = false
+    @State private var caloriesText = ""
+    @State private var proteinText = ""
+    @State private var carbsText = ""
+    @State private var fatText = ""
+    @State private var rawResponse = ""
+    @State private var showRaw = false
 
-    enum ParseStatus {
+    enum ParseStatus: Equatable {
         case idle
-        case processing
-        case foundBoth
-        case foundCaloriesOnly
-        case foundProteinOnly
-        case nothingFound
-        case error(String)
+        case analyzing
+        case success
+        case partial(String)
+        case failed(String)
     }
 
     var body: some View {
@@ -47,11 +45,11 @@ struct ScreenshotImportView: View {
                     VStack(spacing: LockInTheme.Spacing.lg) {
                         instructionHeader
                         photoPickerSection
-                        if let image = selectedImage { imagePreview(image) }
-                        if case .processing = parseStatus { processingIndicator }
-                        resultsSection
-                        if case .nothingFound = parseStatus { noResultsHelp }
-                        confirmButton
+                        if selectedImage != nil { analyzeSection }
+                        if parseStatus != .idle { statusBanner }
+                        if parseStatus == .success || hasAnyValue { resultFields }
+                        if !rawResponse.isEmpty { rawDebugSection }
+                        if hasAnyValue { confirmButton }
                     }
                     .padding(LockInTheme.Spacing.md)
                 }
@@ -59,27 +57,15 @@ struct ScreenshotImportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("IMPORT FROM SCREENSHOT")
-                        .font(LockInTheme.Font.mono(11, weight: .bold))
+                    Text("IMPORT SCREENSHOT")
+                        .font(LockInTheme.Font.mono(12, weight: .bold))
                         .foregroundColor(LockInTheme.Colors.accent)
-                        .tracking(1.5)
+                        .tracking(2)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { isPresented = false }
                         .foregroundColor(LockInTheme.Colors.textSecondary)
                 }
-                if !rawText.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(showRawText ? "Hide OCR" : "Show OCR") {
-                            showRawText.toggle()
-                        }
-                        .font(.system(size: 12))
-                        .foregroundColor(LockInTheme.Colors.textTertiary)
-                    }
-                }
-            }
-            .onChange(of: selectedPhoto) { _, newItem in
-                Task { await loadAndProcess(item: newItem) }
             }
         }
         .preferredColorScheme(.dark)
@@ -89,382 +75,263 @@ struct ScreenshotImportView: View {
     private var instructionHeader: some View {
         VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
             HStack(spacing: LockInTheme.Spacing.sm) {
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: 28))
+                Image(systemName: "sparkles")
                     .foregroundColor(LockInTheme.Colors.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Screenshot Import")
-                        .font(LockInTheme.Font.title(20))
-                        .foregroundColor(LockInTheme.Colors.textPrimary)
-                    Text("Reads calories & protein from your MND screenshot")
-                        .font(.system(size: 12))
-                        .foregroundColor(LockInTheme.Colors.textSecondary)
-                }
+                Text("AI-powered macro extraction")
+                    .font(LockInTheme.Font.label(14, weight: .semibold))
+                    .foregroundColor(LockInTheme.Colors.textPrimary)
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                instructionStep(n: "1", text: "In MyNetDiary, screenshot your Diary or Nutrients page")
-                instructionStep(n: "2", text: "Tap below to select that screenshot")
-                instructionStep(n: "3", text: "LockIn reads it on-device — nothing is uploaded")
-                instructionStep(n: "4", text: "Confirm the values to save to today's log")
-            }
-            .padding(LockInTheme.Spacing.md)
-            .cardStyle()
-        }
-    }
-
-    private func instructionStep(n: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: LockInTheme.Spacing.sm) {
-            Text(n)
-                .font(LockInTheme.Font.mono(11, weight: .bold))
-                .foregroundColor(LockInTheme.Colors.accent)
-                .frame(width: 16)
-            Text(text)
-                .font(.system(size: 12))
+            Text("Screenshot your MyNetDiary diary or food report showing daily totals. Gemini Vision reads calories, protein, carbs, and fat automatically.")
+                .font(.system(size: 13))
                 .foregroundColor(LockInTheme.Colors.textSecondary)
         }
+        .padding(LockInTheme.Spacing.md)
+        .cardStyle()
     }
 
     // MARK: - Photo Picker
     private var photoPickerSection: some View {
-        PhotosPicker(
-            selection: $selectedPhoto,
-            matching: .screenshots,
-            photoLibrary: .shared()
-        ) {
+        PhotosPicker(selection: $selectedItem, matching: .screenshots) {
             HStack {
-                Image(systemName: selectedImage == nil ? "photo.badge.plus" : "arrow.clockwise.circle")
+                Image(systemName: selectedImage != nil ? "photo.fill" : "photo.badge.plus")
                     .font(.system(size: 20))
-                Text(selectedImage == nil ? "Select Screenshot from Photos" : "Choose Different Screenshot")
-                    .font(LockInTheme.Font.label(14, weight: .semibold))
-            }
-            .foregroundColor(.black)
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(LockInTheme.Colors.accent)
-            .cornerRadius(LockInTheme.Radius.md)
-        }
-    }
-
-    // MARK: - Image Preview
-    private func imagePreview(_ image: UIImage) -> some View {
-        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-            Text("SELECTED SCREENSHOT")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 4)
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 200)
-                .cornerRadius(LockInTheme.Radius.md)
-                .overlay(
-                    RoundedRectangle(cornerRadius: LockInTheme.Radius.md)
-                        .stroke(LockInTheme.Colors.border, lineWidth: 1)
-                )
-        }
-    }
-
-    // MARK: - Processing Indicator
-    private var processingIndicator: some View {
-        HStack(spacing: LockInTheme.Spacing.sm) {
-            ProgressView()
-                .tint(LockInTheme.Colors.accent)
-            Text("Reading text from screenshot...")
-                .font(LockInTheme.Font.label(13))
-                .foregroundColor(LockInTheme.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .cardStyle()
-    }
-
-    // MARK: - Results
-    private var resultsSection: some View {
-        Group {
-            switch parseStatus {
-            case .idle: EmptyView()
-            case .processing: EmptyView()
-            case .error(let msg):
-                Text("Error: \(msg)")
-                    .font(.system(size: 13))
-                    .foregroundColor(LockInTheme.Colors.accentRed)
-                    .padding()
-                    .cardStyle()
-            default:
-                VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-                    HStack {
-                        Text("PARSED RESULTS")
-                            .sectionHeaderStyle()
-                        Spacer()
-                        Text(parseStatusLabel)
-                            .font(.system(size: 10))
-                            .foregroundColor(parseStatusColor)
-                    }
-                    .padding(.horizontal, 4)
-
-                    VStack(spacing: LockInTheme.Spacing.sm) {
-                        // Calories field
-                        HStack {
-                            Image(systemName: parsedCalories != nil ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(parsedCalories != nil ? LockInTheme.Colors.accentGreen : LockInTheme.Colors.textTertiary)
-                            Text("Calories")
-                                .font(LockInTheme.Font.label(14))
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                            Spacer()
-                            TextField(parsedCalories != nil ? String(parsedCalories!) : "Enter manually", text: $caloriesText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .font(LockInTheme.Font.mono(16, weight: .semibold))
-                                .foregroundColor(LockInTheme.Colors.accent)
-                                .frame(width: 80)
-                            Text("kcal")
-                                .font(LockInTheme.Font.mono(13))
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
-                        .padding(LockInTheme.Spacing.md)
-                        .cardStyle()
-
-                        // Protein field
-                        HStack {
-                            Image(systemName: parsedProtein != nil ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(parsedProtein != nil ? LockInTheme.Colors.accentGreen : LockInTheme.Colors.textTertiary)
-                            Text("Protein")
-                                .font(LockInTheme.Font.label(14))
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                            Spacer()
-                            TextField(parsedProtein != nil ? String(parsedProtein!) : "Enter manually", text: $proteinText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .font(LockInTheme.Font.mono(16, weight: .semibold))
-                                .foregroundColor(LockInTheme.Colors.accent)
-                                .frame(width: 80)
-                            Text("g")
-                                .font(LockInTheme.Font.mono(13))
-                                .foregroundColor(LockInTheme.Colors.textSecondary)
-                        }
-                        .padding(LockInTheme.Spacing.md)
-                        .cardStyle()
-                    }
-
-                    if showRawText && !rawText.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("RAW OCR TEXT (debug)")
-                                .sectionHeaderStyle()
-                            Text(rawText)
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundColor(LockInTheme.Colors.textTertiary)
-                                .lineLimit(30)
-                        }
-                        .padding(LockInTheme.Spacing.sm)
-                        .cardStyle()
-                    }
+                    .foregroundColor(LockInTheme.Colors.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedImage != nil ? "Screenshot Selected" : "Select Screenshot")
+                        .font(LockInTheme.Font.label(14, weight: .semibold))
+                        .foregroundColor(LockInTheme.Colors.textPrimary)
+                    Text(selectedImage != nil ? "Tap to change" : "Opens your Screenshots album")
+                        .font(.system(size: 11))
+                        .foregroundColor(LockInTheme.Colors.textSecondary)
                 }
-            }
-        }
-    }
-
-    private var noResultsHelp: some View {
-        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
-            Text("COULDN'T FIND DATA AUTOMATICALLY")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 4)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Try these screenshot types:")
-                    .font(LockInTheme.Font.label(13))
-                    .foregroundColor(LockInTheme.Colors.textSecondary)
-                tipRow("MND Diary → shows each meal with calorie totals")
-                tipRow("MND Nutrients report → shows 'Calories' and 'Protein' labels")
-                tipRow("Make sure the text is readable (not blurry)")
-                Text("Or enter the values manually in the fields above.")
+                Spacer()
+                Image(systemName: "chevron.right")
                     .font(.system(size: 12))
                     .foregroundColor(LockInTheme.Colors.textTertiary)
             }
             .padding(LockInTheme.Spacing.md)
             .cardStyle()
         }
+        .onChange(of: selectedItem) { _, item in
+            Task {
+                guard let item else { return }
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let img = UIImage(data: data) {
+                    selectedImage = img
+                    parseStatus = .idle
+                    caloriesText = ""
+                    proteinText = ""
+                    carbsText = ""
+                    fatText = ""
+                    rawResponse = ""
+                }
+            }
+        }
     }
 
-    private func tipRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text("·").foregroundColor(LockInTheme.Colors.accent)
-            Text(text).font(.system(size: 12)).foregroundColor(LockInTheme.Colors.textTertiary)
+    // MARK: - Analyze Section
+    @ViewBuilder
+    private var analyzeSection: some View {
+        if let img = selectedImage {
+            VStack(spacing: LockInTheme.Spacing.sm) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 220)
+                    .cornerRadius(LockInTheme.Radius.md)
+
+                Button {
+                    runAnalysis(image: img)
+                } label: {
+                    HStack {
+                        if isAnalyzing {
+                            ProgressView().scaleEffect(0.8).tint(.black)
+                        } else {
+                            Image(systemName: "sparkles")
+                        }
+                        Text(isAnalyzing ? "Analyzing..." : "Analyze with Gemini AI")
+                    }
+                    .font(LockInTheme.Font.label(14, weight: .bold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(isAnalyzing ? LockInTheme.Colors.accentDim : LockInTheme.Colors.accent)
+                    .cornerRadius(LockInTheme.Radius.md)
+                }
+                .disabled(isAnalyzing)
+            }
+        }
+    }
+
+    // MARK: - Status Banner
+    @ViewBuilder
+    private var statusBanner: some View {
+        HStack(spacing: LockInTheme.Spacing.sm) {
+            Image(systemName: statusIcon)
+                .foregroundColor(statusColor)
+            Text(statusMessage)
+                .font(.system(size: 13))
+                .foregroundColor(statusColor)
+        }
+        .padding(LockInTheme.Spacing.sm + 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(statusColor.opacity(0.1))
+        .cornerRadius(LockInTheme.Radius.sm)
+    }
+
+    private var statusIcon: String {
+        switch parseStatus {
+        case .success:    return "checkmark.circle.fill"
+        case .partial:    return "exclamationmark.triangle.fill"
+        case .failed:     return "xmark.circle.fill"
+        default:          return "info.circle"
+        }
+    }
+    private var statusColor: Color {
+        switch parseStatus {
+        case .success:    return LockInTheme.Colors.accentGreen
+        case .partial:    return LockInTheme.Colors.accentOrange
+        case .failed:     return LockInTheme.Colors.accentRed
+        default:          return LockInTheme.Colors.textSecondary
+        }
+    }
+    private var statusMessage: String {
+        switch parseStatus {
+        case .idle:           return ""
+        case .analyzing:      return "Analyzing screenshot..."
+        case .success:        return "All four macros extracted."
+        case .partial(let m): return m
+        case .failed(let e):  return "Error: \(e)"
+        }
+    }
+
+    // MARK: - Result Fields
+    private var resultFields: some View {
+        VStack(spacing: LockInTheme.Spacing.sm) {
+            Text("EXTRACTED MACROS")
+                .sectionHeaderStyle()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+            macroField(label: "Calories", unit: "kcal", text: $caloriesText,
+                       color: caloriesText.isEmpty ? LockInTheme.Colors.textTertiary : LockInTheme.Colors.textPrimary)
+            macroField(label: "Protein",  unit: "g",    text: $proteinText,
+                       color: proteinText.isEmpty  ? LockInTheme.Colors.textTertiary : LockInTheme.Colors.accentGreen)
+            macroField(label: "Carbs",    unit: "g",    text: $carbsText,
+                       color: carbsText.isEmpty    ? LockInTheme.Colors.textTertiary : LockInTheme.Colors.accentOrange)
+            macroField(label: "Fat",      unit: "g",    text: $fatText,
+                       color: fatText.isEmpty      ? LockInTheme.Colors.textTertiary : LockInTheme.Colors.accentYellow)
+            Text("Edit any value before confirming.")
+                .font(.system(size: 11))
+                .foregroundColor(LockInTheme.Colors.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private func macroField(label: String, unit: String, text: Binding<String>, color: Color) -> some View {
+        HStack {
+            Text(label)
+                .font(LockInTheme.Font.label(14))
+                .foregroundColor(LockInTheme.Colors.textSecondary)
+                .frame(width: 80, alignment: .leading)
+            TextField("0", text: text)
+                .font(LockInTheme.Font.mono(18, weight: .semibold))
+                .foregroundColor(color)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+            Text(unit)
+                .font(LockInTheme.Font.mono(13))
+                .foregroundColor(LockInTheme.Colors.textSecondary)
+        }
+        .padding(LockInTheme.Spacing.md)
+        .cardStyle()
+    }
+
+    // MARK: - Raw debug
+    @ViewBuilder
+    private var rawDebugSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { showRaw.toggle() } label: {
+                HStack {
+                    Text(showRaw ? "Hide Gemini response" : "Show raw Gemini response")
+                        .font(.system(size: 11))
+                        .foregroundColor(LockInTheme.Colors.textTertiary)
+                    Image(systemName: showRaw ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(LockInTheme.Colors.textTertiary)
+                }
+            }
+            if showRaw {
+                Text(rawResponse)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(LockInTheme.Colors.textTertiary)
+                    .padding(LockInTheme.Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LockInTheme.Colors.surfaceElevated)
+                    .cornerRadius(LockInTheme.Radius.sm)
+            }
         }
     }
 
     // MARK: - Confirm Button
     private var confirmButton: some View {
-        Group {
-            let cal = Int(caloriesText) ?? parsedCalories
-            let prot = Int(proteinText) ?? parsedProtein
-            if cal != nil || prot != nil {
-                Button {
-                    onConfirm(cal ?? 0, prot ?? 0)
-                    isPresented = false
-                } label: {
-                    VStack(spacing: 2) {
-                        Text("SAVE TO TODAY'S LOG")
-                            .font(LockInTheme.Font.label(15, weight: .bold))
-                        if let c = cal, let p = prot {
-                            Text("\(c) kcal · \(p)g protein")
-                                .font(.system(size: 11))
-                                .opacity(0.8)
-                        }
-                    }
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(LockInTheme.Colors.accentGreen)
-                    .cornerRadius(LockInTheme.Radius.md)
+        Button {
+            onConfirm(
+                Int(caloriesText) ?? 0,
+                Int(proteinText)  ?? 0,
+                Int(carbsText)    ?? 0,
+                Int(fatText)      ?? 0
+            )
+            isPresented = false
+        } label: {
+            Text("CONFIRM & SAVE TO TODAY")
+                .font(LockInTheme.Font.label(14, weight: .bold))
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(LockInTheme.Colors.accent)
+                .cornerRadius(LockInTheme.Radius.md)
+        }
+    }
+
+    // MARK: - Helpers
+    private var hasAnyValue: Bool {
+        !caloriesText.isEmpty || !proteinText.isEmpty || !carbsText.isEmpty || !fatText.isEmpty
+    }
+
+    // MARK: - Gemini Call
+    private func runAnalysis(image: UIImage) {
+        isAnalyzing = true
+        parseStatus = .analyzing
+        Task {
+            do {
+                let result = try await GeminiService.parseNutritionScreenshot(image)
+                rawResponse = result.rawResponse
+                if let c  = result.calories { caloriesText = String(c) }
+                if let p  = result.protein  { proteinText  = String(p) }
+                if let cb = result.carbs    { carbsText    = String(cb) }
+                if let f  = result.fat      { fatText      = String(f) }
+
+                let found = [result.calories, result.protein, result.carbs, result.fat]
+                    .compactMap { $0 }.count
+                if found == 4 {
+                    parseStatus = .success
+                } else if found > 0 {
+                    let missing = [
+                        result.calories == nil ? "calories" : nil,
+                        result.protein  == nil ? "protein"  : nil,
+                        result.carbs    == nil ? "carbs"    : nil,
+                        result.fat      == nil ? "fat"      : nil
+                    ].compactMap { $0 }.joined(separator: ", ")
+                    parseStatus = .partial("Found \(found)/4. Missing: \(missing). Fill in manually.")
+                } else {
+                    parseStatus = .partial("No values detected. Make sure the screenshot shows daily totals. Fill in manually.")
                 }
+            } catch {
+                rawResponse = error.localizedDescription
+                parseStatus = .failed(error.localizedDescription)
             }
+            isAnalyzing = false
         }
-    }
-
-    // MARK: - Load + Process
-    private func loadAndProcess(item: PhotosPickerItem?) async {
-        guard let item else { return }
-        parseStatus = .processing
-
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
-            parseStatus = .error("Couldn't load image from photo library.")
-            return
-        }
-        selectedImage = image
-
-        let (calories, protein, text) = await runOCR(on: image)
-        rawText = text
-        parsedCalories = calories
-        parsedProtein = protein
-
-        if let c = calories { caloriesText = String(c) }
-        if let p = protein { proteinText = String(p) }
-
-        if calories != nil && protein != nil {
-            parseStatus = .foundBoth
-        } else if calories != nil {
-            parseStatus = .foundCaloriesOnly
-        } else if protein != nil {
-            parseStatus = .foundProteinOnly
-        } else {
-            parseStatus = .nothingFound
-        }
-    }
-
-    // MARK: - Vision OCR
-    private func runOCR(on image: UIImage) async -> (calories: Int?, protein: Int?, rawText: String) {
-        guard let cgImage = image.cgImage else { return (nil, nil, "") }
-
-        return await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                guard error == nil,
-                      let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(returning: (nil, nil, ""))
-                    return
-                }
-
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                let fullText = lines.joined(separator: "\n")
-
-                let calories = ScreenshotParser.parseCalories(from: lines)
-                let protein  = ScreenshotParser.parseProtein(from: lines)
-
-                continuation.resume(returning: (calories, protein, fullText))
-            }
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = false   // faster, better for numbers
-
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            try? handler.perform([request])
-        }
-    }
-
-    // MARK: - Computed Labels
-    private var parseStatusLabel: String {
-        switch parseStatus {
-        case .foundBoth:          return "Both found ✓"
-        case .foundCaloriesOnly:  return "Calories found, protein missing"
-        case .foundProteinOnly:   return "Protein found, calories missing"
-        case .nothingFound:       return "Nothing detected — enter manually"
-        default: return ""
-        }
-    }
-
-    private var parseStatusColor: Color {
-        switch parseStatus {
-        case .foundBoth:  return LockInTheme.Colors.accentGreen
-        case .nothingFound: return LockInTheme.Colors.accentOrange
-        default: return LockInTheme.Colors.textSecondary
-        }
-    }
-}
-
-// MARK: - Screenshot Parser
-// Handles multiple MyNetDiary display formats.
-// MyNetDiary typically shows:
-//   "Calories    1,847"  or  "Total   1,847 cal"  or  "1847 kcal"
-//   "Protein     138 g"  or  "Protein  138"
-enum ScreenshotParser {
-
-    static func parseCalories(from lines: [String]) -> Int? {
-        // Strategy: scan lines for calorie-related keywords and extract nearby numbers
-        let calorieKeywords = ["calorie", "calories", "kcal", "cal", "energy", "total cal", "total calories"]
-        let excludeKeywords  = ["protein", "fat", "carb", "fiber", "sodium", "sugar", "sat"]
-
-        for (i, line) in lines.enumerated() {
-            let lower = line.lowercased()
-            let hasCalorie = calorieKeywords.contains { lower.contains($0) }
-            let hasExclude = excludeKeywords.contains { lower.contains($0) }
-            guard hasCalorie && !hasExclude else { continue }
-
-            // Try to extract number from this line
-            if let n = extractLargestNumber(from: line), n > 50 && n < 10000 {
-                return n
-            }
-            // Try the next line (MND sometimes puts the value on the next line)
-            if i + 1 < lines.count, let n = extractLargestNumber(from: lines[i + 1]), n > 50 && n < 10000 {
-                return n
-            }
-        }
-
-        // Fallback: look for "Total" line which often has the calorie total
-        for (i, line) in lines.enumerated() {
-            let lower = line.lowercased()
-            if lower.hasPrefix("total") || lower == "total" {
-                if let n = extractLargestNumber(from: line), n > 100 && n < 8000 { return n }
-                if i + 1 < lines.count, let n = extractLargestNumber(from: lines[i + 1]), n > 100 && n < 8000 { return n }
-            }
-        }
-        return nil
-    }
-
-    static func parseProtein(from lines: [String]) -> Int? {
-        let proteinKeywords = ["protein"]
-
-        for (i, line) in lines.enumerated() {
-            let lower = line.lowercased()
-            guard proteinKeywords.contains(where: { lower.contains($0) }) else { continue }
-
-            // Try number in same line
-            if let n = extractLargestNumber(from: line), n >= 0 && n < 500 { return n }
-            // Try next line
-            if i + 1 < lines.count, let n = extractLargestNumber(from: lines[i + 1]), n >= 0 && n < 500 { return n }
-        }
-        return nil
-    }
-
-    /// Extracts the largest integer from a string, handling commas (e.g. "1,847" → 1847)
-    private static func extractLargestNumber(from text: String) -> Int? {
-        // Replace commas inside numbers: "1,847" → "1847"
-        let cleaned = text.replacingOccurrences(of: #"(\d),(\d)"#, with: "$1$2", options: .regularExpression)
-        // Find all digit sequences
-        let pattern = try? NSRegularExpression(pattern: #"\d+"#)
-        let range = NSRange(cleaned.startIndex..., in: cleaned)
-        let matches = pattern?.matches(in: cleaned, range: range) ?? []
-        let numbers = matches.compactMap { match -> Int? in
-            guard let r = Range(match.range, in: cleaned) else { return nil }
-            return Int(cleaned[r])
-        }
-        return numbers.max()
     }
 }

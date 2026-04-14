@@ -13,6 +13,8 @@ final class MealEvent {
     var foods: [String]
     var estimatedCalories: Int
     var estimatedProtein: Int
+    var estimatedCarbs: Int
+    var estimatedFat: Int
     var plannedCalories: Int
     var plannedProtein: Int
     var completedAt: Date?
@@ -29,6 +31,8 @@ final class MealEvent {
         foods: [String] = [],
         estimatedCalories: Int = 0,
         estimatedProtein: Int = 0,
+        estimatedCarbs: Int = 0,
+        estimatedFat: Int = 0,
         plannedCalories: Int = 0,
         plannedProtein: Int = 0,
         completedAt: Date? = nil,
@@ -42,6 +46,8 @@ final class MealEvent {
         self.foods = foods
         self.estimatedCalories = estimatedCalories
         self.estimatedProtein = estimatedProtein
+        self.estimatedCarbs = estimatedCarbs
+        self.estimatedFat = estimatedFat
         self.plannedCalories = plannedCalories
         self.plannedProtein = plannedProtein
         self.completedAt = completedAt
@@ -59,6 +65,8 @@ final class MealEvent {
             foods: template.suggestedFoods,
             estimatedCalories: template.calorieTarget,
             estimatedProtein: template.proteinTarget,
+            estimatedCarbs: template.carbTarget,
+            estimatedFat: template.fatTarget,
             plannedCalories: template.calorieTarget,
             plannedProtein: template.proteinTarget,
             notes: template.notes

@@ -12,9 +12,11 @@ final class DailyLog {
     var calorieTarget: Int
     var proteinTarget: Int
 
-    // Actual logged values (pulled from MND manually or entered)
+    // Actual logged values (pulled from MND screenshot or entered manually)
     var actualCalories: Int?
     var actualProtein: Int?
+    var actualCarbs: Int?
+    var actualFat: Int?
 
     // Late-night failure flags
     var hadRestaurantFood: Bool
@@ -51,6 +53,8 @@ final class DailyLog {
         proteinTarget: Int = 145,
         actualCalories: Int? = nil,
         actualProtein: Int? = nil,
+        actualCarbs: Int? = nil,
+        actualFat: Int? = nil,
         hadRestaurantFood: Bool = false,
         hadDessert: Bool = false,
         hadUnplannedNightEating: Bool = false,
@@ -71,6 +75,8 @@ final class DailyLog {
         self.proteinTarget = proteinTarget
         self.actualCalories = actualCalories
         self.actualProtein = actualProtein
+        self.actualCarbs = actualCarbs
+        self.actualFat = actualFat
         self.hadRestaurantFood = hadRestaurantFood
         self.hadDessert = hadDessert
         self.hadUnplannedNightEating = hadUnplannedNightEating

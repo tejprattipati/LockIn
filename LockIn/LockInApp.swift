@@ -26,7 +26,8 @@ struct LockInApp: App {
             ReminderRule.self,
             AdherenceMetric.self,
             TDEEAdjustmentState.self,
-            ExternalIntegrationStatus.self
+            ExternalIntegrationStatus.self,
+            ProgressPhoto.self
         ])
 
         let modelConfiguration = ModelConfiguration(
@@ -66,10 +67,15 @@ struct LockInApp: App {
         let context = LockInApp.sharedModelContainer.mainContext
         DataSeeder.seedIfNeeded(modelContext: context)
 
-        // 4. Reschedule notifications from stored rules
+        // 4. Reschedule notifications — skip smart reminders if action already done today
         let rules = (try? context.fetch(FetchDescriptor<ReminderRule>())) ?? []
         if notificationManager.authorizationStatus == .authorized {
-            await notificationManager.scheduleAll(from: rules)
+            let today = Calendar.current.startOfDay(for: .now)
+            let todayPred = #Predicate<DailyLog> { $0.date == today }
+            let todayLog = (try? context.fetch(FetchDescriptor<DailyLog>(predicate: todayPred)))?.first
+            let isWeighedIn = todayLog?.isWeighedIn ?? false
+            let isFoodLogged = todayLog?.actualCalories != nil
+            await notificationManager.scheduleAll(from: rules, isWeighedIn: isWeighedIn, isFoodLogged: isFoodLogged)
         }
 
         // 5. Sync HealthKit if permitted

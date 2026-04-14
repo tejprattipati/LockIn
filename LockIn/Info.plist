@@ -20,6 +20,14 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 
+	<!-- Camera — for progress photo capture -->
+	<key>NSCameraUsageDescription</key>
+	<string>LockIn uses the camera to capture progress photos for body composition tracking. Photos are stored locally on your device only.</string>
+
+	<!-- Photo Library — for progress photo access -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>LockIn reads photos from your library to import MyNetDiary screenshots and progress photos. No photos leave your device.</string>
+
 	<!-- HealthKit usage descriptions — required for device install -->
 	<key>NSHealthShareUsageDescription</key>
 	<string>LockIn reads body weight, steps, and workout data from Apple Health to update your daily metrics and calorie calculations. No data is sent off-device.</string>

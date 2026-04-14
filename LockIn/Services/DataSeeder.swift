@@ -54,11 +54,27 @@ enum DataSeeder {
     // MARK: - Reminder Rules
     static func seedReminderRules(in context: ModelContext) {
         let existing = (try? context.fetch(FetchDescriptor<ReminderRule>())) ?? []
-        guard existing.isEmpty else { return }
+        guard existing.isEmpty else {
+            // Ensure new rule types are present for existing installs
+            ensureNewReminderRules(existing: existing, in: context)
+            return
+        }
         for rule in ReminderRule.defaults() {
             context.insert(rule)
         }
         try? context.save()
+    }
+
+    /// Adds any ReminderType cases that don't yet have a ReminderRule row.
+    /// Safe to call on every launch — skips types that already exist.
+    static func ensureNewReminderRules(existing: [ReminderRule], in context: ModelContext) {
+        let existingTypes = Set(existing.map { $0.type })
+        var added = false
+        for type_ in ReminderType.allCases where !existingTypes.contains(type_) {
+            context.insert(ReminderRule(type: type_))
+            added = true
+        }
+        if added { try? context.save() }
     }
 
     // MARK: - TDEE State

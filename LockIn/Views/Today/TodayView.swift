@@ -102,12 +102,12 @@ struct TodayView: View {
                     isPresented: $showCalorieSheet,
                     currentCalories: todayLog?.actualCalories,
                     currentProtein: todayLog?.actualProtein,
-                    onSave: saveCalories
+                    onSave: { cal, prot in saveCalories(calories: cal, protein: prot) }
                 )
             }
             .sheet(isPresented: $showScreenshotImport) {
-                ScreenshotImportView(isPresented: $showScreenshotImport) { cal, prot in
-                    saveCalories(calories: cal, protein: prot)
+                ScreenshotImportView(isPresented: $showScreenshotImport) { cal, prot, carbs, fat in
+                    saveCalories(calories: cal, protein: prot, carbs: carbs, fat: fat)
                 }
             }
         }
@@ -236,50 +236,96 @@ struct TodayView: View {
                 .padding(.horizontal, 4)
 
             VStack(spacing: LockInTheme.Spacing.sm) {
+                // Calories
                 HStack {
                     Text("Calories")
                         .font(LockInTheme.Font.label(14))
                         .foregroundColor(LockInTheme.Colors.textSecondary)
                     Spacer()
-                    Text(todayLog?.actualCalories != nil ? "\(todayLog!.actualCalories!) / \(goalProfile?.dailyCalorieTarget ?? 1900)" : "not logged")
+                    Text(todayLog?.actualCalories != nil
+                         ? "\(todayLog!.actualCalories!) / \(goalProfile?.dailyCalorieTarget ?? 1900)"
+                         : "not logged")
                         .font(LockInTheme.Font.mono(14, weight: .semibold))
                         .foregroundColor(calorieColor)
                 }
-                LockInProgressBar(
-                    value: calorieProgress,
-                    color: calorieColor
-                )
+                LockInProgressBar(value: calorieProgress, color: calorieColor)
 
+                // Protein
                 HStack {
                     Text("Protein")
                         .font(LockInTheme.Font.label(14))
                         .foregroundColor(LockInTheme.Colors.textSecondary)
                     Spacer()
-                    Text(todayLog?.actualProtein != nil ? "\(todayLog!.actualProtein!)g / \(goalProfile?.dailyProteinTarget ?? 145)g" : "not logged")
+                    Text(todayLog?.actualProtein != nil
+                         ? "\(todayLog!.actualProtein!)g / \(goalProfile?.dailyProteinTarget ?? 145)g"
+                         : "not logged")
                         .font(LockInTheme.Font.mono(14, weight: .semibold))
                         .foregroundColor(proteinColor)
                 }
-                LockInProgressBar(
-                    value: proteinProgress,
-                    color: proteinColor
-                )
+                LockInProgressBar(value: proteinProgress, color: proteinColor)
+
+                // Carbs + Fat (from screenshot import)
+                if todayLog?.actualCarbs != nil || todayLog?.actualFat != nil {
+                    Divider().background(LockInTheme.Colors.border)
+                    HStack(spacing: LockInTheme.Spacing.lg) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Carbs")
+                                .font(.system(size: 11))
+                                .foregroundColor(LockInTheme.Colors.textTertiary)
+                            Text(todayLog?.actualCarbs != nil ? "\(todayLog!.actualCarbs!)g" : "—")
+                                .font(LockInTheme.Font.mono(14, weight: .semibold))
+                                .foregroundColor(LockInTheme.Colors.accentOrange)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Fat")
+                                .font(.system(size: 11))
+                                .foregroundColor(LockInTheme.Colors.textTertiary)
+                            Text(todayLog?.actualFat != nil ? "\(todayLog!.actualFat!)g" : "—")
+                                .font(LockInTheme.Font.mono(14, weight: .semibold))
+                                .foregroundColor(LockInTheme.Colors.accentYellow)
+                        }
+                        Spacer()
+                    }
+                }
             }
             .padding(LockInTheme.Spacing.md)
             .cardStyle()
 
-            Button {
-                showCalorieSheet = true
-            } label: {
-                HStack {
-                    Image(systemName: "pencil")
-                    Text("Update Calories / Protein")
+            // Action buttons row
+            HStack(spacing: LockInTheme.Spacing.sm) {
+                Button {
+                    showCalorieSheet = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "pencil")
+                        Text("Update Manually")
+                    }
+                    .font(LockInTheme.Font.label(12))
+                    .foregroundColor(LockInTheme.Colors.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(LockInTheme.Colors.accent.opacity(0.12))
+                    .cornerRadius(LockInTheme.Radius.sm)
                 }
-                .font(LockInTheme.Font.label(13))
-                .foregroundColor(LockInTheme.Colors.accent)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(LockInTheme.Colors.accent.opacity(0.12))
-                .cornerRadius(LockInTheme.Radius.sm)
+
+                Button {
+                    Task { await mndManager.open(.logDiary) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.right.square")
+                        Text("Open MND")
+                    }
+                    .font(LockInTheme.Font.label(12))
+                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(LockInTheme.Colors.surface)
+                    .cornerRadius(LockInTheme.Radius.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LockInTheme.Radius.sm)
+                            .stroke(LockInTheme.Colors.border, lineWidth: 1)
+                    )
+                }
             }
         }
     }
@@ -432,22 +478,25 @@ struct TodayView: View {
         todayLog?.checklist(for: .morningWeighIn)?.isCompleted = true
         todayLog?.checklist(for: .morningWeighIn)?.completedAt = .now
         try? modelContext.save()
+        // Cancel noon and 6pm weigh-in follow-up reminders — done for today
+        NotificationManager.shared.cancelWeighInFollowUps()
     }
 
-    private func saveCalories(calories: Int, protein: Int) {
+    private func saveCalories(calories: Int, protein: Int, carbs: Int = 0, fat: Int = 0) {
         todayLog?.actualCalories = calories
-        todayLog?.actualProtein = protein
+        todayLog?.actualProtein  = protein
+        if carbs > 0 { todayLog?.actualCarbs = carbs }
+        if fat  > 0 { todayLog?.actualFat   = fat  }
         if protein >= (goalProfile?.dailyProteinTarget ?? 145) {
             todayLog?.checklist(for: .hitProteinTarget)?.isCompleted = true
         }
         if calories <= (goalProfile?.dailyCalorieTarget ?? 1900) {
             todayLog?.checklist(for: .underCalorieTarget)?.isCompleted = true
         }
-        // Recompute compliance
-        if let log = todayLog {
-            log.complianceScore = ComplianceCalculator.score(for: log)
-        }
+        if let log = todayLog { log.complianceScore = ComplianceCalculator.score(for: log) }
         try? modelContext.save()
+        // Cancel 9pm/10pm food-log reminders — already done today
+        NotificationManager.shared.cancelFoodLoggingReminders()
     }
 }
 

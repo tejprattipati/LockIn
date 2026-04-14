@@ -21,6 +21,7 @@ struct CutProgressView: View {
         case compliance = "Compliance"
         case bodyComp   = "Body Comp"
         case engine     = "TDEE Engine"
+        case photos     = "Photos"
     }
 
     private var userProfile: UserProfile? { userProfiles.first }
@@ -41,6 +42,7 @@ struct CutProgressView: View {
                             case .compliance: complianceSection
                             case .bodyComp:   bodyCompSection
                             case .engine:     tdeeEngineSection
+                            case .photos:     ProgressPhotoView()
                             }
                         }
                         .padding(LockInTheme.Spacing.md)

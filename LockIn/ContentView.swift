@@ -148,6 +148,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             MealEvent.self, ChecklistEntry.self, MealTemplate.self,
             WeightEntry.self, WorkoutEntry.self, ReminderRule.self,
             AdherenceMetric.self, TDEEAdjustmentState.self,
-            ExternalIntegrationStatus.self
+            ExternalIntegrationStatus.self, ProgressPhoto.self
         ], inMemory: true)
 }

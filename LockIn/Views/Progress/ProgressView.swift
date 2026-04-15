@@ -38,7 +38,13 @@ struct CutProgressView: View {
                         VStack(spacing: LockInTheme.Spacing.md) {
                             switch selectedView {
                             case .weight:   weightSection
-                            case .charts:   InteractiveChartsView(weightEntries: weightEntries, dailyLogs: dailyLogs, goalWeight: goalProfile?.targetWeight ?? 147)
+                            case .charts:   InteractiveChartsView(
+                                weightEntries: weightEntries,
+                                dailyLogs: dailyLogs,
+                                goalWeight: goalProfile?.targetWeight ?? 147,
+                                calorieTarget: goalProfile?.dailyCalorieTarget ?? 1900,
+                                proteinTarget: goalProfile?.dailyProteinTarget ?? 145
+                            )
                             case .bodyComp: bodyCompSection
                             case .engine:   tdeeEngineSection
                             case .photos:   ProgressPhotoView()
@@ -472,10 +478,28 @@ struct InteractiveChartsView: View {
     let weightEntries: [WeightEntry]
     let dailyLogs: [DailyLog]
     let goalWeight: Double
+    var calorieTarget: Int = 1900
+    var proteinTarget: Int = 145
 
     var body: some View {
         VStack(spacing: LockInTheme.Spacing.md) {
             InteractiveWeightChart(entries: weightEntries, goalWeight: goalWeight)
+            InteractiveMacroChart(
+                logs: dailyLogs,
+                title: "CALORIES OVER TIME",
+                target: calorieTarget,
+                getValue: { $0.actualCalories },
+                color: LockInTheme.Colors.accent,
+                unit: " kcal"
+            )
+            InteractiveMacroChart(
+                logs: dailyLogs,
+                title: "PROTEIN OVER TIME",
+                target: proteinTarget,
+                getValue: { $0.actualProtein },
+                color: LockInTheme.Colors.accentGreen,
+                unit: "g"
+            )
             InteractiveScoreChart(logs: dailyLogs)
         }
     }
@@ -685,6 +709,120 @@ struct InteractiveScoreChart: View {
         if s >= 40 { return LockInTheme.Colors.accentOrange }
         return LockInTheme.Colors.accentRed
     }
+    private func fmtDate(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
+    }
+}
+
+// MARK: - Interactive Macro Chart (calories or protein over time)
+struct InteractiveMacroChart: View {
+    let logs: [DailyLog]
+    let title: String
+    let target: Int
+    let getValue: (DailyLog) -> Int?
+    let color: Color
+    let unit: String
+
+    @State private var selectedDate: Date?
+
+    private struct DataPoint: Identifiable {
+        let id: UUID
+        let date: Date
+        let value: Int
+    }
+
+    private var data: [DataPoint] {
+        Array(logs.compactMap { log -> DataPoint? in
+            guard let v = getValue(log) else { return nil }
+            return DataPoint(id: log.id, date: log.date, value: v)
+        }.suffix(60))
+    }
+
+    private var selected: DataPoint? {
+        guard let d = selectedDate else { return nil }
+        return data.min(by: { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LockInTheme.Spacing.sm) {
+            HStack {
+                Text(title).sectionHeaderStyle()
+                Spacer()
+                if let s = selected {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(s.value)\(unit)")
+                            .font(LockInTheme.Font.mono(13, weight: .semibold))
+                            .foregroundColor(color)
+                        Text(fmtDate(s.date))
+                            .font(.system(size: 10))
+                            .foregroundColor(LockInTheme.Colors.textTertiary)
+                    }
+                } else {
+                    Text("target: \(target)\(unit)")
+                        .font(.system(size: 10))
+                        .foregroundColor(LockInTheme.Colors.textTertiary)
+                }
+            }
+            .padding(.horizontal, 4)
+
+            if data.isEmpty {
+                Text("No data yet. Log nutrition to see this chart.")
+                    .font(.system(size: 13))
+                    .foregroundColor(LockInTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity).frame(height: 160)
+                    .cardStyle()
+            } else {
+                Chart {
+                    ForEach(data) { pt in
+                        AreaMark(x: .value("Date", pt.date), y: .value(title, pt.value))
+                            .foregroundStyle(LinearGradient(
+                                colors: [color.opacity(0.15), .clear],
+                                startPoint: .top, endPoint: .bottom))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", pt.date), y: .value(title, pt.value))
+                            .foregroundStyle(color)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .interpolationMethod(.catmullRom)
+                    }
+                    RuleMark(y: .value("Target", target))
+                        .foregroundStyle(LockInTheme.Colors.textTertiary.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text("\(target)").font(.system(size: 9))
+                                .foregroundColor(LockInTheme.Colors.textTertiary.opacity(0.7))
+                        }
+                    if let s = selected {
+                        RuleMark(x: .value("Sel", s.date))
+                            .foregroundStyle(color.opacity(0.3))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        PointMark(x: .value("Date", s.date), y: .value(title, s.value))
+                            .foregroundStyle(color)
+                            .symbolSize(50)
+                    }
+                }
+                .frame(height: 170)
+                .chartXSelection(value: $selectedDate)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: max(1, data.count / 5))) { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                            .foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisGridLine().foregroundStyle(LockInTheme.Colors.border)
+                        AxisValueLabel().foregroundStyle(LockInTheme.Colors.textTertiary)
+                            .font(.system(size: 9))
+                    }
+                }
+                .padding(LockInTheme.Spacing.md)
+                .cardStyle()
+            }
+        }
+    }
+
     private func fmtDate(_ d: Date) -> String {
         let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
     }

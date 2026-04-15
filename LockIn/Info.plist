@@ -49,18 +49,20 @@
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).showNightPlan</string>
 	</array>
 
-	<!--
-	    UIRequiresFullScreen suppresses both Xcode warnings:
-	    1. "All interface orientations must be supported unless the app requires full screen"
-	    2. "A launch configuration or launch storyboard must be provided unless the app requires full screen"
-	-->
-	<key>UIRequiresFullScreen</key>
-	<true/>
-
-	<!-- Portrait-only. UIRequiresFullScreen above makes this valid without warnings. -->
+	<!-- All orientations — SwiftUI auto-sizes to any orientation on iPhone and iPad. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 
 	<!-- Blank launch screen -->

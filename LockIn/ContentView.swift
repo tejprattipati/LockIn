@@ -53,9 +53,11 @@ struct ContentView: View {
                 .tag(AppTab.settings)
         }
         .tint(LockInTheme.Colors.accent)
+        .background(LockInTheme.Colors.background.ignoresSafeArea())
         .onAppear {
             checkPendingHandoffs()
             setupTabBarAppearance()
+            setupNavigationBarAppearance()
         }
         // Handle notification-triggered deep links
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("lockin.openAntiBinge"))) { _ in
@@ -98,6 +100,25 @@ struct ContentView: View {
         ]
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
+    // MARK: - Navigation Bar Appearance
+    private func setupNavigationBarAppearance() {
+        let navBg = UIColor(LockInTheme.Colors.background)
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = navBg
+        appearance.shadowColor = UIColor(LockInTheme.Colors.border)
+        appearance.titleTextAttributes = [
+            .foregroundColor: UIColor(LockInTheme.Colors.textPrimary)
+        ]
+        appearance.largeTitleTextAttributes = [
+            .foregroundColor: UIColor(LockInTheme.Colors.textPrimary)
+        ]
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
+        UINavigationBar.appearance().tintColor = UIColor(LockInTheme.Colors.accent)
     }
 }
 

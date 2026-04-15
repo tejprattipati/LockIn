@@ -19,6 +19,7 @@ struct TodayView: View {
     @State private var showCalorieSheet = false
     @State private var showInterveneTab = false
     @State private var showScreenshotImport = false
+    @State private var showHistory = false
     @State private var newWeight: String = ""
     @State private var newCalories: String = ""
     @State private var newProtein: String = ""
@@ -88,11 +89,19 @@ struct TodayView: View {
                         .glowAccent(radius: 8)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showWeighInSheet = true
-                    } label: {
-                        Image(systemName: "scalemass")
-                            .foregroundColor(LockInTheme.Colors.accent)
+                    HStack(spacing: 16) {
+                        Button {
+                            showHistory = true
+                        } label: {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundColor(LockInTheme.Colors.textSecondary)
+                        }
+                        Button {
+                            showWeighInSheet = true
+                        } label: {
+                            Image(systemName: "scalemass")
+                                .foregroundColor(LockInTheme.Colors.accent)
+                        }
                     }
                 }
             }
@@ -111,6 +120,9 @@ struct TodayView: View {
                 ScreenshotImportView(isPresented: $showScreenshotImport) { cal, prot, carbs, fat in
                     saveCalories(calories: cal, protein: prot, carbs: carbs, fat: fat)
                 }
+            }
+            .sheet(isPresented: $showHistory) {
+                PastDayLogSheet(isPresented: $showHistory, goalProfile: goalProfile)
             }
         }
         .preferredColorScheme(.dark)
@@ -451,9 +463,7 @@ struct TodayView: View {
     }
 
     private var daysSinceStart: Int {
-        // Count from when first weight entry was made or app installed
-        guard let first = weightEntries.last else { return 1 }
-        return max(1, Calendar.current.dateComponents([.day], from: first.date, to: .now).day ?? 1)
+        max(0, 117 - (goalProfile?.daysUntilGoal ?? 117))
     }
 
     private var currentStreak: Int {

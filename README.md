@@ -1,22 +1,11 @@
 # LockIn — Personal Cut Discipline System
 
-A single-user iOS app built in SwiftUI, designed specifically to enforce a fat-loss
-cut plan by targeting the exact failure points: late-night ordering, dessert binges,
-inconsistent logging, and failure to pre-plan the night meal.
-
-**This is not a public app. It is a personal operating system for a specific cut.**
+iOS app built in SwiftUI, designed specifically to enforce a fat-loss
+cut plan by targeting these exact failure points: late-night ordering, dessert binges,
+inconsistent logging, and failure to pre-plan night meals.
 
 ---
 
-## Goal
-
-- Current: ~170 lb, ~25–26% BF
-- Target: 147 lb, 12% BF
-- Deadline: August 8, 2026
-- Intermediate check-in: May 17, 2026
-- Required pace: ~1.4 lb/week
-
----
 
 ## Features
 

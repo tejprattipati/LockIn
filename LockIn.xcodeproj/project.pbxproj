@@ -45,6 +45,7 @@
 		F1D4AAAB35267EBFC08D6244 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C3F99A24156DAEBF7C5133 /* GeminiService.swift */; };
 		B3F6CDDE57489ADEF2AF8466 /* ProgressPhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E5BCCD46378FCDE19E7355 /* ProgressPhotoView.swift */; };
 		D5B8EFF079601CF0C4C1A688 /* ScreenshotImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7DEEF68590BEFB3B09577 /* ScreenshotImportView.swift */; };
+		987C5DDF0F444FADBD6ABE1E /* PastDayLogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5641B9AA35B4E96BDA4D05B /* PastDayLogSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +90,7 @@
 		E0C3F99A24156DAEBF7C5133 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
 		A2E5BCCD46378FCDE19E7355 /* ProgressPhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPhotoView.swift; sourceTree = "<group>"; };
 		C4A7DEEF68590BEFB3B09577 /* ScreenshotImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotImportView.swift; sourceTree = "<group>"; };
+		E5641B9AA35B4E96BDA4D05B /* PastDayLogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastDayLogSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +190,7 @@
 				FED675ABEDF16CC17186EE2D /* DailyChecklistView.swift */,
 				0A656F2D619A094CDCD5C5F9 /* TodayView.swift */,
 				C4A7DEEF68590BEFB3B09577 /* ScreenshotImportView.swift */,
+				E5641B9AA35B4E96BDA4D05B /* PastDayLogSheet.swift */,
 			);
 			path = Today;
 			sourceTree = "<group>";
@@ -361,6 +364,7 @@
 				F1D4AAAB35267EBFC08D6244 /* GeminiService.swift in Sources */,
 				B3F6CDDE57489ADEF2AF8466 /* ProgressPhotoView.swift in Sources */,
 				D5B8EFF079601CF0C4C1A688 /* ScreenshotImportView.swift in Sources */,
+				987C5DDF0F444FADBD6ABE1E /* PastDayLogSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
